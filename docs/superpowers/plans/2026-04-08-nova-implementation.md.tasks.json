@@ -1,0 +1,82 @@
+{
+  "planPath": "docs/superpowers/plans/2026-04-08-nova-implementation.md",
+  "tasks": [
+    {
+      "id": 0,
+      "subject": "Task 0: CLI Spike — Verify claude flags and session ID capture",
+      "status": "pending",
+      "description": "**Goal:** Determine exact `claude` CLI flags for resuming sessions and injecting system prompts, and discover how to capture a session's ID after first spawn.\n\n**Files:**\n- Create: `docs/nova-cli-spike.md`\n\n**Acceptance Criteria:**\n- [ ] Exact flag for resuming a prior session is documented\n- [ ] Exact flag for system prompt injection is documented\n- [ ] Session ID capture mechanism is documented\n- [ ] Fallback approach documented if flags don't exist\n\n**Verify:** `docs/nova-cli-spike.md` exists with findings\n\n```json:metadata\n{\"files\": [\"docs/nova-cli-spike.md\"], \"verifyCommand\": \"test -f docs/nova-cli-spike.md\", \"acceptanceCriteria\": [\"Exact resume flag documented\", \"System prompt flag documented\", \"Session ID capture mechanism documented\"]}\n```"
+    },
+    {
+      "id": 1,
+      "subject": "Task 1: Project Scaffold",
+      "status": "pending",
+      "blockedBy": [],
+      "description": "**Goal:** Working Go module with config loading, minimal main.go, justfile, and service file.\n\n**Files:**\n- Create: `go.mod`, `config/config.go`, `config/config_test.go`, `main.go`, `justfile`, `nova.service`, `.gitignore`\n\n**Acceptance Criteria:**\n- [ ] `go test ./config/...` passes\n- [ ] `go build .` produces a `nova` binary\n- [ ] Config loads TOML with correct defaults\n- [ ] Bot refuses to start with empty `bot_token`\n\n**Verify:** `go test ./config/... -v` → all tests pass\n\n```json:metadata\n{\"files\": [\"go.mod\", \"config/config.go\", \"config/config_test.go\", \"main.go\", \"justfile\", \"nova.service\", \".gitignore\"], \"verifyCommand\": \"go test ./config/... -v\", \"acceptanceCriteria\": [\"go test ./config/... passes\", \"go build . succeeds\"]}\n```"
+    },
+    {
+      "id": 2,
+      "subject": "Task 2: SQLite Store",
+      "status": "pending",
+      "blockedBy": [1],
+      "description": "**Goal:** Database layer with schema migrations and full CRUD for sessions, swarms, and messages.\n\n**Files:**\n- Create: `nova/db/db.go`, `nova/db/db_test.go`\n\n**Acceptance Criteria:**\n- [ ] `go test ./nova/db/... -v` passes\n- [ ] Sessions CRUD works\n- [ ] Swarms CRUD works\n- [ ] ResetActiveSessions sets hot→cold\n- [ ] Messages can be inserted and counted\n\n**Verify:** `go test ./nova/db/... -v` → all tests pass\n\n```json:metadata\n{\"files\": [\"nova/db/db.go\", \"nova/db/db_test.go\"], \"verifyCommand\": \"go test ./nova/db/... -v\", \"acceptanceCriteria\": [\"All DB tests pass\", \"ResetActiveSessions works\"]}\n```"
+    },
+    {
+      "id": 3,
+      "subject": "Task 3: Directive Parser",
+      "status": "pending",
+      "blockedBy": [1],
+      "description": "**Goal:** Package that parses single-line JSON directives from Claude's stdout.\n\n**Files:**\n- Create: `nova/directive/directive.go`, `nova/directive/directive_test.go`\n\n**Acceptance Criteria:**\n- [ ] All directive types parse correctly\n- [ ] Non-JSON lines return nil, nil\n- [ ] Malformed JSON returns error\n\n**Verify:** `go test ./nova/directive/... -v` → all tests pass\n\n```json:metadata\n{\"files\": [\"nova/directive/directive.go\", \"nova/directive/directive_test.go\"], \"verifyCommand\": \"go test ./nova/directive/... -v\", \"acceptanceCriteria\": [\"All parse tests pass\", \"nil returned for non-JSON\", \"Error returned for malformed JSON\"]}\n```"
+    },
+    {
+      "id": 4,
+      "subject": "Task 4: Discord Client Interface, Helpers, and Test Stub",
+      "status": "pending",
+      "blockedBy": [1],
+      "description": "**Goal:** Client interface, channel/category helpers, and testdiscord stub.\n\n**Files:**\n- Create: `nova/discord/discord.go`, `nova/discord/discord_test.go`, `internal/testdiscord/testdiscord.go`\n\n**Acceptance Criteria:**\n- [ ] EnsureCategory is idempotent\n- [ ] EnsureChannel is idempotent\n- [ ] ArchiveChannel renames with ✓- prefix\n- [ ] PostMessage splits at 2000 chars\n\n**Verify:** `go test ./nova/discord/... -v` → all tests pass\n\n```json:metadata\n{\"files\": [\"nova/discord/discord.go\", \"nova/discord/discord_test.go\", \"internal/testdiscord/testdiscord.go\"], \"verifyCommand\": \"go test ./nova/discord/... -v\", \"acceptanceCriteria\": [\"EnsureCategory idempotent\", \"ArchiveChannel renames correctly\", \"PostMessage splits at 2000 chars\"]}\n```"
+    },
+    {
+      "id": 5,
+      "subject": "Task 5: Session Subprocess",
+      "status": "pending",
+      "blockedBy": [0, 3, 4],
+      "description": "**Goal:** Session struct with hot/cold state machine, subprocess I/O goroutines, and idle timer.\n\n**Files:**\n- Create: `nova/session/session.go`, `nova/session/session_test.go`\n\n**Acceptance Criteria:**\n- [ ] Warm starts subprocess, status becomes hot\n- [ ] Send delivers messages to stdin\n- [ ] Responses accumulate until done sentinel\n- [ ] Directives intercepted, not posted to Discord\n- [ ] Idle timer fires OnIdle\n- [ ] Terminate stops subprocess\n\n**Verify:** `go test ./nova/session/... -v` → all tests pass\n\n```json:metadata\n{\"files\": [\"nova/session/session.go\", \"nova/session/session_test.go\"], \"verifyCommand\": \"go test ./nova/session/... -v\", \"acceptanceCriteria\": [\"Warm transitions to hot\", \"Send works\", \"Directives intercepted\", \"Idle timer fires\", \"Terminate works\"]}\n```"
+    },
+    {
+      "id": 6,
+      "subject": "Task 6: Session Manager",
+      "status": "pending",
+      "blockedBy": [2, 5],
+      "description": "**Goal:** Manager owning the session map, handling spawn/kill/resume and directive routing.\n\n**Files:**\n- Create: `nova/session/manager.go`, `nova/session/manager_test.go`\n\n**Acceptance Criteria:**\n- [ ] Spawn creates workspace, channel, DB record, subprocess\n- [ ] Kill terminates and archives\n- [ ] ByChannel routes correctly\n- [ ] WarmIfCold warms cold sessions\n- [ ] Claude session ID captured and stored in DB\n\n**Verify:** `go test ./nova/session/... -v` → all tests pass\n\n```json:metadata\n{\"files\": [\"nova/session/manager.go\", \"nova/session/manager_test.go\"], \"verifyCommand\": \"go test ./nova/session/... -v\", \"acceptanceCriteria\": [\"Spawn creates all resources\", \"Kill terminates and archives\", \"ByChannel works\", \"Session ID captured\"]}\n```"
+    },
+    {
+      "id": 7,
+      "subject": "Task 7: Swarm Manager",
+      "status": "pending",
+      "blockedBy": [2, 4, 6],
+      "description": "**Goal:** swarm.Manager for create, dissolve, and broadcast.\n\n**Files:**\n- Create: `nova/swarm/swarm.go`, `nova/swarm/swarm_test.go`\n\n**Acceptance Criteria:**\n- [ ] Create inserts DB record and Discord category\n- [ ] Duplicate name returns error\n- [ ] Broadcast sends to all sessions in swarm\n- [ ] Dissolve kills all sessions\n\n**Verify:** `go test ./nova/swarm/... -v` → all tests pass\n\n```json:metadata\n{\"files\": [\"nova/swarm/swarm.go\", \"nova/swarm/swarm_test.go\"], \"verifyCommand\": \"go test ./nova/swarm/... -v\", \"acceptanceCriteria\": [\"Create works\", \"Duplicate name errors\", \"Broadcast sends to all\", \"Dissolve kills all\"]}\n```"
+    },
+    {
+      "id": 8,
+      "subject": "Task 8: Discord Message Routing",
+      "status": "pending",
+      "blockedBy": [6],
+      "description": "**Goal:** Route non-bot messages in session channels to session stdin.\n\n**Files:**\n- Create: `nova/nova/nova.go`\n\n**Acceptance Criteria:**\n- [ ] Bot messages ignored\n- [ ] Non-session channels ignored\n- [ ] Session channel messages delivered to session\n\n**Verify:** `go build ./...` → no errors\n\n```json:metadata\n{\"files\": [\"nova/nova/nova.go\"], \"verifyCommand\": \"go build ./...\", \"acceptanceCriteria\": [\"Bot messages ignored\", \"Session messages routed\"]}\n```"
+    },
+    {
+      "id": 9,
+      "subject": "Task 9: Slash Commands",
+      "status": "pending",
+      "blockedBy": [6, 7],
+      "description": "**Goal:** Register /nova command tree and implement all interaction handlers.\n\n**Files:**\n- Create: `nova/nova/commands/commands.go`\n\n**Acceptance Criteria:**\n- [ ] /nova spawn creates session\n- [ ] /nova list shows sessions\n- [ ] /nova kill terminates\n- [ ] /nova resume warms session\n- [ ] /nova status shows detail\n- [ ] /nova clean removes workspaces\n- [ ] /nova swarm create/dissolve work\n- [ ] /nova broadcast sends to swarm\n\n**Verify:** `go build ./...` → no errors\n\n```json:metadata\n{\"files\": [\"nova/nova/commands/commands.go\"], \"verifyCommand\": \"go build ./...\", \"acceptanceCriteria\": [\"All /nova subcommands registered\", \"Handlers compile without error\"]}\n```"
+    },
+    {
+      "id": 10,
+      "subject": "Task 10: Bot Wiring and Startup Sequence",
+      "status": "pending",
+      "blockedBy": [8, 9],
+      "description": "**Goal:** Complete nova.go coordinator and main.go with full startup sequence.\n\n**Files:**\n- Modify: `nova/nova/nova.go`\n- Modify: `main.go`\n\n**Acceptance Criteria:**\n- [ ] go build . produces working binary\n- [ ] Bot refuses to start with empty bot_token or guild_id\n- [ ] System prompt written on startup\n- [ ] Control channel and categories ensured\n- [ ] go test ./... passes\n\n**Verify:** `go build . && go test ./... -v` → all pass\n\n```json:metadata\n{\"files\": [\"nova/nova/nova.go\", \"main.go\"], \"verifyCommand\": \"go build . && go test ./... -v\", \"acceptanceCriteria\": [\"Binary builds\", \"All tests pass\", \"Startup sequence complete\"]}\n```"
+    }
+  ],
+  "lastUpdated": "2026-04-08T00:00:00Z"
+}
