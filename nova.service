@@ -1,0 +1,12 @@
+[Unit]
+Description=Nova Claude Swarm Controller
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=%h/workspace/discord/nova/nova --config %h/.nova/config.toml
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=default.target
