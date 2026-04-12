@@ -1,6 +1,4 @@
 .worktrees/
-/nova
-!/nova/
 data/
 *.db
 .env
