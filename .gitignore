@@ -2,3 +2,5 @@
 data/
 *.db
 .env
+# Don't commit the binary
+bin/

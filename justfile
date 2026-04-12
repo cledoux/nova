@@ -1,5 +1,5 @@
 IMAGE    := "ghcr.io/anthropics/claude-code:latest"
-BINARY   := "nova"
+BINARY   := "bin/nova"
 CONTAINER := "nova"
 
 # Pull the latest Claude Code image
@@ -8,6 +8,7 @@ pull:
 
 # Build the nova binary (static, no CGO) for Docker deployment
 build:
+	mkdir -p bin
 	CGO_ENABLED=0 go build -o {{BINARY}} .
 
 # Run tests
