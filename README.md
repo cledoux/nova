@@ -1,5 +1,7 @@
 # Nova
 
+<img src="img/nova_icon.png" alt="Nova icon" width="200" align="right" />
+
 Nova is a Discord bot that spawns and orchestrates [Claude Code](https://claude.ai/code) CLI subprocesses. Each session gets its own Discord channel; you chat with the agent by typing in that channel, and the agent can spawn additional agents, send them messages, and create new channels — all via a JSON directive protocol embedded in its output.
 
 ## Requirements
