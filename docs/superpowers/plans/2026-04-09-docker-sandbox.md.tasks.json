@@ -1,0 +1,21 @@
+{
+  "planPath": "docs/superpowers/plans/2026-04-09-docker-sandbox.md",
+  "tasks": [
+    {
+      "id": 9,
+      "subject": "Task 1: Create sandbox.conf and justfile",
+      "status": "completed",
+      "description": "**Goal:** Produce a working justfile with all six sandbox recipes and a sandbox.conf with the default allow list.\n\n**Files:**\n- Create: `sandbox.conf`\n- Create: `justfile`\n\n**Acceptance Criteria:**\n- [ ] `just --list` shows all six recipes without errors\n- [ ] `sandbox.conf` contains the nova project path and a comment header\n- [ ] `justfile` compiles cleanly (no syntax errors)\n\n**Verify:** `just --list` → lists pull, build, start, stop, logs, sandbox\n\n```json:metadata\n{\"files\": [\"sandbox.conf\", \"justfile\"], \"verifyCommand\": \"just --list\", \"acceptanceCriteria\": [\"just --list shows all six recipes\", \"sandbox.conf contains nova project path\", \"No justfile syntax errors\"]}\n```"
+    },
+    {
+      "id": 10,
+      "subject": "Task 2: Smoke test — verify image and interactive sandbox",
+      "status": "completed",
+      "blockedBy": [
+        9
+      ],
+      "description": "**Goal:** Confirm the official image pulls and that just sandbox correctly launches an interactive Claude Code session with the expected mounts.\n\n**Files:** (none created — verification only)\n\n**Acceptance Criteria:**\n- [ ] `just pull` completes without error\n- [ ] `claude --version` runs inside container\n- [ ] `~/.claude` is visible at `/root/.claude` inside container\n- [ ] `/workspace/nova` is visible inside container\n- [ ] Container exits cleanly after session ends\n\n**Verify:** `docker run --rm ghcr.io/anthropics/claude-code:latest claude --version` → prints version string\n\n```json:metadata\n{\"files\": [], \"verifyCommand\": \"docker run --rm ghcr.io/anthropics/claude-code:latest claude --version\", \"acceptanceCriteria\": [\"just pull succeeds\", \"claude --version runs in container\", \"mounts are correct\", \"just sandbox launches interactive session\"]}\n```"
+    }
+  ],
+  "lastUpdated": "2026-04-09T00:00:00Z"
+}

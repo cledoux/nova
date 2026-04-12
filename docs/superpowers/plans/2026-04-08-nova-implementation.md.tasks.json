@@ -4,7 +4,7 @@
     {
       "id": 0,
       "subject": "Task 0: CLI Spike — Verify claude flags and session ID capture",
-      "status": "pending",
+      "status": "completed",
       "description": "**Goal:** Determine exact `claude` CLI flags for resuming sessions and injecting system prompts, and discover how to capture a session's ID after first spawn.\n\n**Files:**\n- Create: `docs/nova-cli-spike.md`\n\n**Acceptance Criteria:**\n- [ ] Exact flag for resuming a prior session is documented\n- [ ] Exact flag for system prompt injection is documented\n- [ ] Session ID capture mechanism is documented\n- [ ] Fallback approach documented if flags don't exist\n\n**Verify:** `docs/nova-cli-spike.md` exists with findings\n\n```json:metadata\n{\"files\": [\"docs/nova-cli-spike.md\"], \"verifyCommand\": \"test -f docs/nova-cli-spike.md\", \"acceptanceCriteria\": [\"Exact resume flag documented\", \"System prompt flag documented\", \"Session ID capture mechanism documented\"]}\n```"
     },
     {
@@ -73,7 +73,7 @@
     {
       "id": 10,
       "subject": "Task 10: Bot Wiring and Startup Sequence",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [8, 9],
       "description": "**Goal:** Complete nova.go coordinator and main.go with full startup sequence.\n\n**Files:**\n- Modify: `nova/nova/nova.go`\n- Modify: `main.go`\n\n**Acceptance Criteria:**\n- [ ] go build . produces working binary\n- [ ] Bot refuses to start with empty bot_token or guild_id\n- [ ] System prompt written on startup\n- [ ] Control channel and categories ensured\n- [ ] go test ./... passes\n\n**Verify:** `go build . && go test ./... -v` → all pass\n\n```json:metadata\n{\"files\": [\"nova/nova/nova.go\", \"main.go\"], \"verifyCommand\": \"go build . && go test ./... -v\", \"acceptanceCriteria\": [\"Binary builds\", \"All tests pass\", \"Startup sequence complete\"]}\n```"
     }
