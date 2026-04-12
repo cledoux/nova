@@ -9,8 +9,8 @@ import (
 	"syscall"
 
 	"nova/config"
-	novadb "nova/nova/db"
-	nova "nova/nova/nova"
+	novadb "nova/db"
+	nova "nova/bot"
 
 	"github.com/bwmarrin/discordgo"
 )

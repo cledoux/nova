@@ -6,9 +6,9 @@ import (
 
 	"nova/config"
 	"nova/internal/testdiscord"
-	"nova/nova/db"
-	"nova/nova/session"
-	"nova/nova/swarm"
+	"nova/db"
+	"nova/session"
+	"nova/swarm"
 )
 
 func setup(t *testing.T) (*swarm.Manager, *db.Store, *testdiscord.Session) {

@@ -10,9 +10,9 @@ import (
 	"time"
 
 	"nova/config"
-	"nova/nova/db"
-	"nova/nova/directive"
-	discordhelper "nova/nova/discord"
+	"nova/db"
+	"nova/directive"
+	discordhelper "nova/discord"
 
 	"github.com/google/uuid"
 )

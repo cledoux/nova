@@ -12,7 +12,7 @@ import (
 	"syscall"
 	"time"
 
-	"nova/nova/directive"
+	"nova/directive"
 )
 
 const (

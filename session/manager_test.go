@@ -7,8 +7,8 @@ import (
 
 	"nova/config"
 	"nova/internal/testdiscord"
-	"nova/nova/db"
-	"nova/nova/session"
+	"nova/db"
+	"nova/session"
 )
 
 func newTestManager(t *testing.T) (*session.Manager, *db.Store, *testdiscord.Session) {

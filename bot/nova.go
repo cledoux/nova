@@ -1,5 +1,5 @@
 // Package nova is the top-level coordinator for the Nova Discord bot.
-package nova
+package bot
 
 import (
 	"context"
@@ -9,11 +9,11 @@ import (
 	"path/filepath"
 
 	"nova/config"
-	"nova/nova/db"
-	discordhelper "nova/nova/discord"
-	"nova/nova/nova/commands"
-	"nova/nova/session"
-	"nova/nova/swarm"
+	"nova/db"
+	discordhelper "nova/discord"
+	"nova/bot/commands"
+	"nova/session"
+	"nova/swarm"
 
 	"github.com/bwmarrin/discordgo"
 )

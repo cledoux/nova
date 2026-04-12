@@ -5,9 +5,9 @@ import (
 	"context"
 	"fmt"
 
-	"nova/nova/db"
-	discordhelper "nova/nova/discord"
-	"nova/nova/session"
+	"nova/db"
+	discordhelper "nova/discord"
+	"nova/session"
 
 	"github.com/google/uuid"
 )

@@ -3,7 +3,7 @@ package directive_test
 import (
 	"testing"
 
-	"nova/nova/directive"
+	"nova/directive"
 )
 
 func TestParse_spawn(t *testing.T) {

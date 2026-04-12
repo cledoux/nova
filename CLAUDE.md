@@ -18,18 +18,18 @@ goimports -w . 2>/dev/null || true
 
 ## Module layout
 
-Module name is `nova`. The nested `nova/nova/` path creates triple-nova import paths:
+Module name is `nova`. Packages are flat at the repo root:
 
 | Directory | Import path |
 |-----------|-------------|
 | `config/` | `nova/config` |
-| `nova/db/` | `nova/nova/db` |
-| `nova/directive/` | `nova/nova/directive` |
-| `nova/discord/` | `nova/nova/discord` |
-| `nova/session/` | `nova/nova/session` |
-| `nova/swarm/` | `nova/nova/swarm` |
-| `nova/nova/` | `nova/nova/nova` |
-| `nova/nova/commands/` | `nova/nova/nova/commands` |
+| `db/` | `nova/db` |
+| `directive/` | `nova/directive` |
+| `discord/` | `nova/discord` |
+| `session/` | `nova/session` |
+| `swarm/` | `nova/swarm` |
+| `bot/` | `nova/bot` |
+| `bot/commands/` | `nova/bot/commands` |
 | `internal/testdiscord/` | `nova/internal/testdiscord` |
 
 ## Testing conventions
@@ -48,6 +48,6 @@ Module name is `nova`. The nested `nova/nova/` path creates triple-nova import p
 
 ## Pitfalls
 
-- **`.gitignore` and the `nova/` directory**: The `.gitignore` has `/nova` (root binary) and `!/nova/` (un-ignore the package directory). Don't collapse these into a plain `nova` entry or `git add nova/` will fail.
+- **`.gitignore` and the `/nova` binary**: The `.gitignore` uses `/nova` (root binary) and `!/nova/` to un-ignore a `nova/` directory. The `nova/` package directory no longer exists, so this is a no-op and can be simplified to just `/nova` if desired.
 - **`ChannelEdit.Topic`** is `string`, not `*string`, in discordgo v0.29.0.
 - **SQLite timestamp precision**: `CURRENT_TIMESTAMP` has second-level granularity. The `TouchSession` query uses `strftime('%Y-%m-%d %H:%M:%f', 'now')` for millisecond precision.

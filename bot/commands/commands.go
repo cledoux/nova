@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"nova/nova/db"
-	"nova/nova/session"
-	"nova/nova/swarm"
+	"nova/db"
+	"nova/session"
+	"nova/swarm"
 
 	"github.com/bwmarrin/discordgo"
 )

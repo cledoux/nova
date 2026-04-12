@@ -29,19 +29,17 @@ session.Manager.ByChannel  →  Session.Send(msg)
 
 ```
 nova/
-├── main.go                    — entry point: config, DB, Discord, nova.Run()
+├── main.go                    — entry point: config, DB, Discord, bot.Run()
 ├── config/                    — TOML config loader
-├── internal/
-│   └── testdiscord/           — fake discord.Client for tests
-└── nova/
-    ├── db/                    — SQLite store (sessions, swarms, messages)
-    ├── directive/             — JSON directive parser
-    ├── discord/               — Discord helper functions + Client interface
-    ├── session/               — Session and Manager (hot/cold lifecycle)
-    ├── swarm/                 — Swarm Manager (create, dissolve, broadcast)
-    └── nova/
-        ├── nova.go            — startup sequence, message router
-        └── commands/          — /nova slash command handlers
+├── db/                        — SQLite store (sessions, swarms, messages)
+├── directive/                 — JSON directive parser
+├── discord/                   — Discord helper functions + Client interface
+├── session/                   — Session and Manager (hot/cold lifecycle)
+├── swarm/                     — Swarm Manager (create, dissolve, broadcast)
+├── bot/                       — startup sequence, message router
+│   └── commands/              — /nova slash command handlers
+└── internal/
+    └── testdiscord/           — fake discord.Client for tests
 ```
 
 ## Session lifecycle

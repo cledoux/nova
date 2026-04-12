@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"nova/nova/db"
+	"nova/db"
 )
 
 func newTestStore(t *testing.T) *db.Store {

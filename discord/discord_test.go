@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"nova/internal/testdiscord"
-	"nova/nova/discord"
+	"nova/discord"
 )
 
 const guildID = "guild-1"

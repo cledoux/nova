@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"nova/nova/directive"
-	"nova/nova/session"
+	"nova/directive"
+	"nova/session"
 )
 
 // fakeClaude writes a shell script that echoes each stdin line back with
