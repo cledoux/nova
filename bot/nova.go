@@ -5,13 +5,14 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 
+	"nova/bot/commands"
 	"nova/config"
 	"nova/db"
 	discordhelper "nova/discord"
-	"nova/bot/commands"
 	"nova/session"
 	"nova/swarm"
 
@@ -43,6 +44,7 @@ func Intents() discordgo.Intent {
 // Returns initialized managers for use by main.
 func Run(ctx context.Context, dg *discordgo.Session, store *db.Store, cfg *config.Config) (*session.Manager, *swarm.Manager, error) {
 	// 1. Write system prompt file.
+	slog.Debug("writing system prompt file")
 	if err := writeSystemPrompt(); err != nil {
 		return nil, nil, fmt.Errorf("write system prompt: %w", err)
 	}
@@ -50,12 +52,14 @@ func Run(ctx context.Context, dg *discordgo.Session, store *db.Store, cfg *confi
 	guildID := cfg.GuildID
 
 	// 2. Ensure control channel.
+	slog.Debug("ensuring control channel", "name", cfg.ControlChannelName)
 	_, err := discordhelper.EnsureChannel(dg, guildID, "", cfg.ControlChannelName)
 	if err != nil {
 		log.Printf("warn: could not ensure control channel: %v", err)
 	}
 
 	// 3. Ensure fixed categories.
+	slog.Debug("ensuring Discord categories")
 	soloCatID, err := discordhelper.EnsureCategory(dg, guildID, "Nova: solo")
 	if err != nil {
 		return nil, nil, fmt.Errorf("ensure solo category: %w", err)
@@ -64,6 +68,7 @@ func Run(ctx context.Context, dg *discordgo.Session, store *db.Store, cfg *confi
 	if err != nil {
 		return nil, nil, fmt.Errorf("ensure archive category: %w", err)
 	}
+	slog.Debug("Discord categories ready", "solo_cat", soloCatID, "archive_cat", archiveCatID)
 
 	// 4. Build managers.
 	sessionMgr := session.NewManager(store, dg, cfg, soloCatID, archiveCatID)
@@ -73,12 +78,13 @@ func Run(ctx context.Context, dg *discordgo.Session, store *db.Store, cfg *confi
 	RegisterMessageRouter(dg, sessionMgr)
 
 	// 6. Register slash commands.
+	slog.Debug("registering slash commands")
 	commands.Register(dg, sessionMgr, swarmMgr, store, guildID)
 	if err := commands.RegisterCommands(dg, guildID); err != nil {
 		return nil, nil, fmt.Errorf("register commands: %w", err)
 	}
 
-	log.Println("Nova startup complete.")
+	slog.Info("nova startup complete", "guild_id", guildID)
 	return sessionMgr, swarmMgr, nil
 }
 
@@ -92,15 +98,25 @@ func RegisterMessageRouter(dg *discordgo.Session, mgr *session.Manager) {
 		}
 		sess := mgr.ByChannel(m.ChannelID)
 		if sess == nil {
+			slog.Debug("message in unmanaged channel, ignoring",
+				"channel_id", m.ChannelID,
+				"author", m.Author.Username,
+			)
 			return
 		}
 		ctx := context.Background()
 		if sess.Status == session.StatusCold {
+			slog.Info("warming cold session for incoming message", "session", sess.Name, "author", m.Author.Username)
 			if err := mgr.WarmIfCold(ctx, sess.ID); err != nil {
 				log.Printf("WarmIfCold %s: %v", sess.Name, err)
 				return
 			}
 		}
+		slog.Info("routing message to session",
+			"session", sess.Name,
+			"author", m.Author.Username,
+			"content_len", len(m.Content),
+		)
 		if err := sess.Send(m.Content); err != nil {
 			log.Printf("Send to %s: %v", sess.Name, err)
 		}
