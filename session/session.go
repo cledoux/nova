@@ -280,7 +280,7 @@ func (s *Session) readLoop(gen int64) {
 			continue
 		}
 		if event.IsError {
-			slog.Warn("readLoop: result event is error", "session", s.Name)
+			slog.Warn("readLoop: result event is error", "session", s.Name, "result", event.Result)
 			continue
 		}
 
