@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"nova/bot/commands"
 	"nova/config"
@@ -75,7 +76,7 @@ func Run(ctx context.Context, dg *discordgo.Session, store *db.Store, cfg *confi
 	swarmMgr := swarm.NewManager(store, dg, sessionMgr, guildID)
 
 	// 5. Register message router.
-	RegisterMessageRouter(dg, sessionMgr)
+	RegisterMessageRouter(dg, sessionMgr, cfg)
 
 	// 6. Register slash commands.
 	slog.Debug("registering slash commands")
@@ -90,21 +91,42 @@ func Run(ctx context.Context, dg *discordgo.Session, store *db.Store, cfg *confi
 
 // RegisterMessageRouter installs the handler that routes Discord messages to
 // the appropriate Claude session's stdin.
-func RegisterMessageRouter(dg *discordgo.Session, mgr *session.Manager) {
+func RegisterMessageRouter(dg *discordgo.Session, mgr *session.Manager, cfg *config.Config) {
 	dg.AddHandler(func(s *discordgo.Session, m *discordgo.MessageCreate) {
 		// Ignore the bot's own messages.
 		if m.Author.ID == s.State.User.ID {
 			return
 		}
+
+		ctx := context.Background()
+
 		sess := mgr.ByChannel(m.ChannelID)
 		if sess == nil {
-			slog.Debug("message in unmanaged channel, ignoring",
+			// In unmanaged channels, only respond if the bot is @mentioned or
+			// the bot's name appears in the message content.
+			if !botIsMentioned(s, m, cfg.ControlChannelName) {
+				slog.Debug("message in unmanaged channel without bot mention, ignoring",
+					"channel_id", m.ChannelID,
+					"author", m.Author.Username,
+				)
+				return
+			}
+			sess = mgr.ByName(cfg.ControlChannelName)
+			if sess == nil {
+				slog.Warn("bot mentioned in unmanaged channel but no control session exists",
+					"channel_id", m.ChannelID,
+					"author", m.Author.Username,
+					"control_session", cfg.ControlChannelName,
+				)
+				return
+			}
+			slog.Info("routing mention in unmanaged channel to control session",
 				"channel_id", m.ChannelID,
 				"author", m.Author.Username,
+				"control_session", cfg.ControlChannelName,
 			)
-			return
 		}
-		ctx := context.Background()
+
 		if sess.Status == session.StatusCold {
 			slog.Info("warming cold session for incoming message", "session", sess.Name, "author", m.Author.Username)
 			if err := mgr.WarmIfCold(ctx, sess.ID); err != nil {
@@ -121,6 +143,17 @@ func RegisterMessageRouter(dg *discordgo.Session, mgr *session.Manager) {
 			log.Printf("Send to %s: %v", sess.Name, err)
 		}
 	})
+}
+
+// botIsMentioned returns true if the bot is @mentioned in the message or if
+// the bot's name (controlName) appears in the message content.
+func botIsMentioned(s *discordgo.Session, m *discordgo.MessageCreate, controlName string) bool {
+	for _, u := range m.Mentions {
+		if u.ID == s.State.User.ID {
+			return true
+		}
+	}
+	return strings.Contains(strings.ToLower(m.Content), strings.ToLower(controlName))
 }
 
 func writeSystemPrompt() error {
