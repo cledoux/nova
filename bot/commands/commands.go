@@ -4,6 +4,7 @@ package commands
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"strings"
 	"time"
@@ -89,6 +90,13 @@ func (h *handler) onInteraction(s *discordgo.Session, i *discordgo.InteractionCr
 		return
 	}
 	sub := data.Options[0]
+	invoker := interactionUser(i)
+	// For swarm sub-group, log the nested subcommand name too.
+	subLabel := sub.Name
+	if sub.Name == "swarm" && len(sub.Options) > 0 {
+		subLabel = "swarm " + sub.Options[0].Name
+	}
+	slog.Info("slash command", "command", "/nova "+subLabel, "invoker", invoker)
 	ctx := context.Background()
 	switch sub.Name {
 	case "spawn":
@@ -129,9 +137,11 @@ func (h *handler) handleSpawn(ctx context.Context, s *discordgo.Session, i *disc
 
 	sess, err := h.sessions.Spawn(ctx, session.SpawnOpts{Name: name, SwarmID: swarmID})
 	if err != nil {
+		slog.Error("spawn failed", "name", name, "swarm", swarmName, "err", err)
 		respondEphemeral(s, i, fmt.Sprintf("Failed to spawn session: %v", err))
 		return
 	}
+	slog.Info("session spawned via command", "session", sess.Name, "channel_id", sess.ChannelID, "swarm", swarmName)
 	respondEphemeral(s, i, fmt.Sprintf("Spawned **%s** → <#%s>", sess.Name, sess.ChannelID))
 }
 
@@ -177,9 +187,11 @@ func (h *handler) handleKill(ctx context.Context, s *discordgo.Session, i *disco
 	opts := optMap(sub.Options)
 	name := opts["name"]
 	if err := h.sessions.Kill(name); err != nil {
+		slog.Error("kill failed", "name", name, "err", err)
 		respondEphemeral(s, i, fmt.Sprintf("Kill failed: %v", err))
 		return
 	}
+	slog.Info("session killed via command", "session", name)
 	respondEphemeral(s, i, fmt.Sprintf("Session **%s** terminated.", name))
 }
 
@@ -240,9 +252,11 @@ func (h *handler) handleBroadcast(ctx context.Context, s *discordgo.Session, i *
 	swarmName := opts["swarm"]
 	message := opts["message"]
 	if err := h.swarms.Broadcast(ctx, swarmName, message); err != nil {
+		slog.Error("broadcast failed", "swarm", swarmName, "err", err)
 		respondEphemeral(s, i, fmt.Sprintf("Broadcast failed: %v", err))
 		return
 	}
+	slog.Info("broadcast sent via command", "swarm", swarmName, "message_len", len(message))
 	respondEphemeral(s, i, fmt.Sprintf("Broadcast sent to **%s**.", swarmName))
 }
 
@@ -283,6 +297,17 @@ func (h *handler) handleSwarmGroup(ctx context.Context, s *discordgo.Session, i 
 		}
 		respondEphemeral(s, i, fmt.Sprintf("Swarm **%s** dissolved.", opts["name"]))
 	}
+}
+
+// interactionUser returns a display name for the user who triggered i.
+func interactionUser(i *discordgo.InteractionCreate) string {
+	if i.Member != nil && i.Member.User != nil {
+		return i.Member.User.Username
+	}
+	if i.User != nil {
+		return i.User.Username
+	}
+	return "unknown"
 }
 
 func respondEphemeral(s *discordgo.Session, i *discordgo.InteractionCreate, content string) {
