@@ -28,3 +28,9 @@ restart: build
 
 logs:
 	docker compose logs -f
+
+shell:
+	docker compose exec nova /bin/bash
+
+claude:
+	docker compose exec nova claude --dangerously-skip-permissions

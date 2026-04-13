@@ -19,6 +19,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     wget \
     && rm -rf /var/lib/apt/lists/*
 
+# Debug tools
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    procps \
+    htop \
+    && rm -rf /var/lib/apt/lists/*
+
 # Node.js via NodeSource
 RUN curl -fsSL https://deb.nodesource.com/setup_${NODE_MAJOR}.x | bash - \
     && apt-get install -y --no-install-recommends nodejs \

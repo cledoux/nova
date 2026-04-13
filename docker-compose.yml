@@ -4,7 +4,11 @@ services:
     restart: unless-stopped
     working_dir: /workspace
     volumes:
+      - agent-home:/home/agent
       - ${HOME}/.claude:/home/agent/.claude
       - ${HOME}/.nova:/home/agent/.nova
       - .:/workspace
     command: /workspace/bin/nova --config /home/agent/.nova/config.toml
+
+volumes:
+  agent-home:
