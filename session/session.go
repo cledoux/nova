@@ -4,6 +4,7 @@ package session
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
@@ -83,7 +84,7 @@ func (s *Session) Warm(ctx context.Context, claudeBin, systemPromptPath string, 
 		"session", s.Name,
 		"bin", claudeBin,
 		"workspace", s.Workspace,
-		"resume", s.ClaudeSID != "",
+		"resume", isResume,
 		"idle_timeout", idleTimeout,
 	)
 	cmd := exec.CommandContext(ctx, claudeBin, args...)
@@ -120,8 +121,17 @@ func (s *Session) Warm(ctx context.Context, claudeBin, systemPromptPath string, 
 // buildArgs constructs the claude CLI argument list.
 // isResume distinguishes re-warming a cold session (use --resume) from
 // starting a brand-new session (use --session-id to pre-assign the UUID).
+// The system prompt is only injected on first spawn; resumed sessions already
+// carry it in their conversation history.
 func buildArgs(claudeSID, systemPromptPath string, isResume bool) []string {
-	var args []string
+	// --print + stream-json enables non-interactive pipe mode with multi-turn input.
+	// --verbose is required by --output-format=stream-json.
+	args := []string{
+		"--print",
+		"--input-format=stream-json",
+		"--output-format=stream-json",
+		"--verbose",
+	}
 	if claudeSID != "" {
 		if isResume {
 			args = append(args, "--resume", claudeSID)
@@ -129,7 +139,7 @@ func buildArgs(claudeSID, systemPromptPath string, isResume bool) []string {
 			args = append(args, "--session-id", claudeSID)
 		}
 	}
-	if systemPromptPath != "" {
+	if !isResume && systemPromptPath != "" {
 		args = append(args, "--system-prompt-file", systemPromptPath)
 	}
 	return args
@@ -208,11 +218,18 @@ func (s *Session) coolIfGen(gen int64) {
 	s.Status = StatusCold
 }
 
-// readLoop reads stdout line-by-line, dispatching directives and accumulating
-// content until {"type":"done"} is received. gen identifies which Warm cycle
-// this goroutine belongs to; it exits without acting if a newer cycle started.
+// streamEvent is the minimal shape we need from Claude's stream-json output.
+type streamEvent struct {
+	Type    string `json:"type"`
+	Result  string `json:"result"`
+	IsError bool   `json:"is_error"`
+}
+
+// readLoop reads stdout line-by-line, parsing Claude's stream-json events.
+// When a "result" event arrives (end of a turn), the result text is scanned
+// for embedded directives and the remainder is posted to Discord.
+// gen identifies which Warm cycle this goroutine belongs to.
 func (s *Session) readLoop(gen int64) {
-	var buf strings.Builder
 	for {
 		s.mu.Lock()
 		stdout := s.stdout
@@ -224,46 +241,68 @@ func (s *Session) readLoop(gen int64) {
 
 		line, err := stdout.ReadString('\n')
 		if err != nil {
-			// Subprocess closed stdout — flush any remaining content and go cold,
-			// but only if we are still the active generation.
+			// Subprocess closed stdout — cool the session if we're still active.
 			s.mu.Lock()
 			isActive := s.gen == gen
 			s.mu.Unlock()
 			if isActive {
-				slog.Debug("readLoop: subprocess stdout closed, flushing and cooling", "session", s.Name)
-				if content := strings.TrimSpace(buf.String()); content != "" {
-					s.callbacks.OnContent(s.ChannelID, content)
-				}
+				slog.Debug("readLoop: subprocess stdout closed, cooling", "session", s.Name)
 				s.coolIfGen(gen)
 			}
 			return
 		}
 
 		trimmed := strings.TrimRight(line, "\n\r")
-		d, parseErr := directive.Parse(trimmed)
+		if trimmed == "" {
+			continue
+		}
+
+		var event streamEvent
+		if err := json.Unmarshal([]byte(trimmed), &event); err != nil {
+			slog.Debug("readLoop: non-JSON line, ignoring", "session", s.Name)
+			continue
+		}
+
+		if event.Type != "result" {
+			slog.Debug("readLoop: skipping event", "session", s.Name, "type", event.Type)
+			continue
+		}
+		if event.IsError {
+			slog.Warn("readLoop: result event is error", "session", s.Name)
+			continue
+		}
+
+		slog.Debug("readLoop: result event", "session", s.Name, "result_len", len(event.Result))
+		s.dispatchResult(event.Result)
+	}
+}
+
+// dispatchResult scans the turn result text for directive lines (JSON starting
+// with '{') and posts the remaining content to Discord.
+func (s *Session) dispatchResult(text string) {
+	var contentBuf strings.Builder
+	for _, line := range strings.Split(text, "\n") {
+		d, parseErr := directive.Parse(line)
 		if parseErr != nil {
-			// Malformed JSON that starts with '{' — treat as content.
-			slog.Debug("readLoop: malformed JSON treated as content", "session", s.Name, "line", trimmed)
-			buf.WriteString(line)
+			// Malformed JSON starting with '{' — treat as content.
+			contentBuf.WriteString(line)
+			contentBuf.WriteByte('\n')
 			continue
 		}
 		if d != nil {
-			switch d.Type {
-			case directive.TypeDone:
-				content := strings.TrimSpace(buf.String())
-				slog.Debug("readLoop: done directive, flushing content", "session", s.Name, "content_len", len(content))
-				if content != "" {
-					s.callbacks.OnContent(s.ChannelID, content)
-				}
-				buf.Reset()
-			default:
-				slog.Debug("readLoop: intercepted directive", "session", s.Name, "type", d.Type)
+			if d.Type != directive.TypeDone {
+				slog.Debug("dispatchResult: intercepted directive", "session", s.Name, "type", d.Type)
 				s.callbacks.OnDirective(s, *d)
 			}
+			// TypeDone: no-op — the "result" event already signals turn completion.
 			continue
 		}
-		slog.Debug("readLoop: content line", "session", s.Name, "len", len(trimmed))
-		buf.WriteString(line)
+		contentBuf.WriteString(line)
+		contentBuf.WriteByte('\n')
+	}
+	if content := strings.TrimSpace(contentBuf.String()); content != "" {
+		slog.Debug("dispatchResult: posting content", "session", s.Name, "content_len", len(content))
+		s.callbacks.OnContent(s.ChannelID, content)
 	}
 }
 
@@ -296,7 +335,18 @@ func (s *Session) writeLoop(gen int64, idleTimeout time.Duration) {
 			if stdin == nil {
 				return
 			}
-			fmt.Fprintln(stdin, msg)
+			data, err := json.Marshal(map[string]any{
+				"type": "user",
+				"message": map[string]string{
+					"role":    "user",
+					"content": msg,
+				},
+			})
+			if err != nil {
+				slog.Error("writeLoop: failed to marshal message", "session", s.Name, "err", err)
+				continue
+			}
+			fmt.Fprintln(stdin, string(data))
 
 		case <-timer.C:
 			slog.Debug("writeLoop: idle timeout fired", "session", s.Name, "timeout", idleTimeout)

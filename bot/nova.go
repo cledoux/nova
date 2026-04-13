@@ -21,7 +21,6 @@ import (
 )
 
 const systemPrompt = `You are an agent in a Discord-native swarm. Your responses are posted to a Discord channel.
-Always end every response with {"type":"done"} on its own line.
 
 To issue directives to the swarm, emit one JSON object per line with a "type" field.
 Directives are intercepted by the bot and not posted to Discord.
@@ -30,7 +29,6 @@ Available directive types:
   {"type":"spawn","name":"<name>","task":"<initial message>"}
   {"type":"send","to":"<name>","message":"<msg>"}
   {"type":"create_channel","name":"<name>"}
-  {"type":"done"}
 
 All other output is posted to your Discord channel verbatim.`
 

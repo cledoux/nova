@@ -11,11 +11,18 @@ import (
 	"nova/session"
 )
 
-// fakeClaude writes a shell script that echoes each stdin line back with
-// a {"type":"done"} sentinel, simulating Claude's response protocol.
+// fakeClaude writes a shell script that reads stream-json input messages and
+// echoes the content back as a stream-json "result" event, simulating Claude's
+// --print --input-format=stream-json --output-format=stream-json protocol.
 func fakeClaude(t *testing.T) string {
 	t.Helper()
-	script := "#!/bin/sh\nwhile IFS= read -r line; do\n  printf '%s\\n' \"$line\"\n  printf '{\"type\":\"done\"}\\n'\ndone\n"
+	// Extract content from {"type":"user","message":{"role":"user","content":"<msg>"}}
+	// and emit {"type":"result","subtype":"success","result":"<msg>","is_error":false}
+	script := "#!/bin/sh\n" +
+		"while IFS= read -r line; do\n" +
+		"  content=$(printf '%s' \"$line\" | sed 's/.*\"content\":\"\\([^\"]*\\)\".*/\\1/')\n" +
+		"  printf '{\"type\":\"result\",\"subtype\":\"success\",\"result\":\"%s\",\"is_error\":false}\\n' \"$content\"\n" +
+		"done\n"
 	path := filepath.Join(t.TempDir(), "fakeclaude")
 	if err := os.WriteFile(path, []byte(script), 0755); err != nil {
 		t.Fatal(err)
@@ -54,8 +61,12 @@ func TestSession_WarmAndSend(t *testing.T) {
 }
 
 func TestSession_DirectiveIntercepted(t *testing.T) {
-	// Script emits a directive then done — directive should NOT appear in content.
-	script := "#!/bin/sh\nprintf '{\"type\":\"spawn\",\"name\":\"w\",\"task\":\"t\"}\\n'\nprintf '{\"type\":\"done\"}\\n'\ncat\n"
+	// Script emits a result whose text contains a directive line — directive
+	// should be intercepted and NOT appear in content.
+	script := "#!/bin/sh\n" +
+		"printf '{\"type\":\"result\",\"subtype\":\"success\"," +
+		"\"result\":\"{\\\\\"type\\\\\":\\\\\"spawn\\\\\",\\\\\"name\\\\\":\\\\\"w\\\\\",\\\\\"task\\\\\":\\\\\"t\\\\\"}\",\"is_error\":false}\\n'\n" +
+		"cat\n"
 	path := filepath.Join(t.TempDir(), "fakeclaude")
 	if err := os.WriteFile(path, []byte(script), 0755); err != nil {
 		t.Fatal(err)
