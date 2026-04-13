@@ -75,6 +75,7 @@ func novaCommand() *discordgo.ApplicationCommand {
 					opt("name", "Swarm name", str, true),
 				}},
 			}},
+			{Type: sub, Name: "help", Description: "Show available commands"},
 		},
 	}
 }
@@ -106,6 +107,8 @@ func (h *handler) onInteraction(s *discordgo.Session, i *discordgo.InteractionCr
 		h.handleBroadcast(ctx, s, i, sub)
 	case "swarm":
 		h.handleSwarmGroup(ctx, s, i, sub)
+	case "help":
+		h.handleHelp(s, i)
 	}
 }
 
@@ -241,6 +244,22 @@ func (h *handler) handleBroadcast(ctx context.Context, s *discordgo.Session, i *
 		return
 	}
 	respondEphemeral(s, i, fmt.Sprintf("Broadcast sent to **%s**.", swarmName))
+}
+
+func (h *handler) handleHelp(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	const msg = "```\n" +
+		"/nova spawn [name] [swarm]   Spawn a new Claude session\n" +
+		"/nova list [swarm]           List active sessions\n" +
+		"/nova kill <name>            Terminate a session\n" +
+		"/nova resume <name>          Force-warm a cold session\n" +
+		"/nova status <name>          Show session status\n" +
+		"/nova clean                  Delete workspaces of terminated sessions\n" +
+		"/nova broadcast <swarm> <msg> Send message to all sessions in a swarm\n" +
+		"/nova swarm create <name>    Create a swarm\n" +
+		"/nova swarm dissolve <name>  Dissolve a swarm\n" +
+		"/nova help                   Show this message\n" +
+		"```"
+	respondEphemeral(s, i, msg)
 }
 
 func (h *handler) handleSwarmGroup(ctx context.Context, s *discordgo.Session, i *discordgo.InteractionCreate, sub *discordgo.ApplicationCommandInteractionDataOption) {
