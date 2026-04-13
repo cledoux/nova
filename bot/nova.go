@@ -93,6 +93,7 @@ func Run(ctx context.Context, dg *discordgo.Session, store *db.Store, cfg *confi
 	if _, err := sessionMgr.SpawnOrRevive(ctx, session.SpawnOpts{
 		Name:      cfg.ControlChannelName,
 		ChannelID: controlChannelID,
+		Workspace: cfg.RepoPath,
 	}); err != nil {
 		return nil, nil, fmt.Errorf("spawn control session: %w", err)
 	}

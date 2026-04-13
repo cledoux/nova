@@ -25,6 +25,7 @@ type SpawnOpts struct {
 	Task       string // injected as the first message if non-empty
 	CategoryID string // Discord category; uses soloCategoryID if empty
 	ChannelID  string // attach to existing channel instead of creating one
+	Workspace  string // override session workspace directory; defaults to SessionRoot/<id>
 }
 
 // Manager owns all active sessions and handles their lifecycle.
@@ -112,7 +113,10 @@ func (m *Manager) Spawn(ctx context.Context, opts SpawnOpts) (*Session, error) {
 
 	slog.Info("spawning session", "name", name, "swarm_id", opts.SwarmID)
 
-	workspace := filepath.Join(m.cfg.SessionRoot, id)
+	workspace := opts.Workspace
+	if workspace == "" {
+		workspace = filepath.Join(m.cfg.SessionRoot, id)
+	}
 	if err := os.MkdirAll(workspace, 0o755); err != nil {
 		return nil, fmt.Errorf("create workspace: %w", err)
 	}
