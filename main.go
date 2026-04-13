@@ -4,13 +4,14 @@ import (
 	"context"
 	"flag"
 	"log"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
 
+	nova "nova/bot"
 	"nova/config"
 	novadb "nova/db"
-	nova "nova/bot"
 
 	"github.com/bwmarrin/discordgo"
 )
@@ -29,6 +30,22 @@ func main() {
 	if cfg.GuildID == "" {
 		log.Fatal("guild_id is required in config.toml")
 	}
+
+	// Configure structured logger; debug mode enables slog.LevelDebug output.
+	logLevel := slog.LevelInfo
+	if cfg.Debug {
+		logLevel = slog.LevelDebug
+	}
+	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: logLevel})))
+
+	slog.Info("nova starting",
+		"guild_id", cfg.GuildID,
+		"control_channel", cfg.ControlChannelName,
+		"session_root", cfg.SessionRoot,
+		"idle_timeout_min", cfg.IdleTimeoutMinutes,
+		"claude_bin", cfg.ClaudeBin,
+		"debug", cfg.Debug,
+	)
 
 	store, err := novadb.New("data/nova.db")
 	if err != nil {
@@ -58,8 +75,9 @@ func main() {
 		log.Fatalf("nova run: %v", err)
 	}
 
-	log.Println("Nova running. Ctrl-C to stop.")
+	slog.Info("nova running — press Ctrl-C to stop")
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM)
 	<-sc
+	slog.Info("nova shutting down")
 }
