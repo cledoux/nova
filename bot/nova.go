@@ -54,9 +54,9 @@ func Run(ctx context.Context, dg *discordgo.Session, store *db.Store, cfg *confi
 
 	// 2. Ensure control channel.
 	slog.Debug("ensuring control channel", "name", cfg.ControlChannelName)
-	_, err := discordhelper.EnsureChannel(dg, guildID, "", cfg.ControlChannelName)
+	controlChannelID, err := discordhelper.EnsureChannel(dg, guildID, "", cfg.ControlChannelName)
 	if err != nil {
-		log.Printf("warn: could not ensure control channel: %v", err)
+		return nil, nil, fmt.Errorf("ensure control channel: %w", err)
 	}
 
 	// 3. Ensure fixed categories.
@@ -75,10 +75,19 @@ func Run(ctx context.Context, dg *discordgo.Session, store *db.Store, cfg *confi
 	sessionMgr := session.NewManager(store, dg, cfg, soloCatID, archiveCatID)
 	swarmMgr := swarm.NewManager(store, dg, sessionMgr, guildID)
 
-	// 5. Register message router.
+	// 5. Spawn the control session attached to the existing control channel.
+	slog.Info("spawning control session", "name", cfg.ControlChannelName, "channel_id", controlChannelID)
+	if _, err := sessionMgr.Spawn(ctx, session.SpawnOpts{
+		Name:      cfg.ControlChannelName,
+		ChannelID: controlChannelID,
+	}); err != nil {
+		return nil, nil, fmt.Errorf("spawn control session: %w", err)
+	}
+
+	// 6. Register message router.
 	RegisterMessageRouter(dg, sessionMgr, cfg)
 
-	// 6. Register slash commands.
+	// 7. Register slash commands.
 	slog.Debug("registering slash commands")
 	commands.Register(dg, sessionMgr, swarmMgr, store, guildID)
 	if err := commands.RegisterCommands(dg, guildID); err != nil {

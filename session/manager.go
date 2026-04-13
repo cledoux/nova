@@ -24,6 +24,7 @@ type SpawnOpts struct {
 	SwarmID    string
 	Task       string // injected as the first message if non-empty
 	CategoryID string // Discord category; uses soloCategoryID if empty
+	ChannelID  string // attach to existing channel instead of creating one
 }
 
 // Manager owns all active sessions and handles their lifecycle.
@@ -73,15 +74,20 @@ func (m *Manager) Spawn(ctx context.Context, opts SpawnOpts) (*Session, error) {
 		return nil, fmt.Errorf("create workspace: %w", err)
 	}
 
-	catID := opts.CategoryID
-	if catID == "" {
-		catID = m.soloCategoryID
-	}
-
-	slog.Debug("creating Discord channel", "session", name, "category_id", catID)
-	channelID, err := discordhelper.CreateChannel(m.discord, m.cfg.GuildID, catID, name)
-	if err != nil {
-		return nil, fmt.Errorf("create channel: %w", err)
+	channelID := opts.ChannelID
+	if channelID == "" {
+		catID := opts.CategoryID
+		if catID == "" {
+			catID = m.soloCategoryID
+		}
+		slog.Debug("creating Discord channel", "session", name, "category_id", catID)
+		var err error
+		channelID, err = discordhelper.CreateChannel(m.discord, m.cfg.GuildID, catID, name)
+		if err != nil {
+			return nil, fmt.Errorf("create channel: %w", err)
+		}
+	} else {
+		slog.Debug("attaching session to existing channel", "session", name, "channel_id", channelID)
 	}
 
 	dbSess := db.Session{
