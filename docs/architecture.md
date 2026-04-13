@@ -51,7 +51,7 @@ Spawn()
   ├─ create Discord channel
   ├─ insert DB record (status=cold)
   ├─ Session.Warm()  →  status=hot
-  │    ├─ exec claude --resume <id> [--system-prompt-file ...]
+  │    ├─ exec claude --session-id <id> [--system-prompt-file ...]
   │    ├─ start readLoop goroutine
   │    └─ start writeLoop goroutine (idle timer)
   └─ (optional) Send(initialTask)
@@ -115,10 +115,14 @@ Server
 Nova calls the Claude Code CLI as a subprocess:
 
 ```sh
+# First spawn — pre-assign the session UUID
+claude --session-id <session-uuid> --system-prompt-file ~/.nova/system-prompt.txt
+
+# Re-warming a cold session — reconnect to the persisted conversation
 claude --resume <session-uuid> --system-prompt-file ~/.nova/system-prompt.txt
 ```
 
-On first spawn, `--resume <uuid>` both sets and pre-assigns the session ID (Claude creates the session directory with that UUID on first run). Subsequent `Warm()` calls on cold sessions use the same `--resume <uuid>` to reconnect to the persisted conversation.
+`Manager.Spawn` generates a UUID before launching Claude and stores it in the DB immediately (no directory diffing required). The first `Warm()` call uses `--session-id` so Claude creates the session with that exact UUID. Subsequent `Warm()` calls on cold sessions use `--resume` to reconnect to the persisted conversation.
 
 Input/output is plain text over stdio (one message per line). The system prompt instructs Claude to end every response with `{"type":"done"}` on its own line so Nova knows when a turn is complete.
 

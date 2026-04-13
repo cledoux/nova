@@ -77,7 +77,8 @@ func (s *Session) Warm(ctx context.Context, claudeBin, systemPromptPath string, 
 		return fmt.Errorf("session %s is terminated", s.ID)
 	}
 
-	args := buildArgs(s.ClaudeSID, systemPromptPath)
+	isResume := s.gen > 0
+	args := buildArgs(s.ClaudeSID, systemPromptPath, isResume)
 	slog.Debug("starting claude subprocess",
 		"session", s.Name,
 		"bin", claudeBin,
@@ -117,10 +118,16 @@ func (s *Session) Warm(ctx context.Context, claudeBin, systemPromptPath string, 
 }
 
 // buildArgs constructs the claude CLI argument list.
-func buildArgs(claudeSID, systemPromptPath string) []string {
+// isResume distinguishes re-warming a cold session (use --resume) from
+// starting a brand-new session (use --session-id to pre-assign the UUID).
+func buildArgs(claudeSID, systemPromptPath string, isResume bool) []string {
 	var args []string
 	if claudeSID != "" {
-		args = append(args, "--resume", claudeSID)
+		if isResume {
+			args = append(args, "--resume", claudeSID)
+		} else {
+			args = append(args, "--session-id", claudeSID)
+		}
 	}
 	if systemPromptPath != "" {
 		args = append(args, "--system-prompt-file", systemPromptPath)
