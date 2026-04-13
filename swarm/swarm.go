@@ -4,6 +4,7 @@ package swarm
 import (
 	"context"
 	"fmt"
+	"log/slog"
 
 	"nova/db"
 	discordhelper "nova/discord"
@@ -30,6 +31,7 @@ func (m *Manager) Create(name string) (db.Swarm, error) {
 	if _, err := m.store.GetSwarmByName(name); err == nil {
 		return db.Swarm{}, fmt.Errorf("swarm %q already exists", name)
 	}
+	slog.Info("creating swarm", "name", name)
 	catName := "Nova: " + name
 	catID, err := discordhelper.EnsureCategory(m.discord, m.guildID, catName)
 	if err != nil {
@@ -43,6 +45,7 @@ func (m *Manager) Create(name string) (db.Swarm, error) {
 	if err := m.store.CreateSwarm(sw); err != nil {
 		return db.Swarm{}, fmt.Errorf("create swarm record: %w", err)
 	}
+	slog.Info("swarm created", "name", name, "category_id", catID)
 	return sw, nil
 }
 
@@ -56,10 +59,16 @@ func (m *Manager) Dissolve(name string) error {
 	if err != nil {
 		return err
 	}
+	slog.Info("dissolving swarm", "name", name, "session_count", len(sessions))
 	for _, s := range sessions {
+		slog.Debug("dissolve: killing session", "swarm", name, "session", s.Name)
 		_ = m.sessions.Kill(s.Name) // best-effort
 	}
-	return m.store.DeleteSwarm(sw.ID)
+	if err := m.store.DeleteSwarm(sw.ID); err != nil {
+		return err
+	}
+	slog.Info("swarm dissolved", "name", name)
+	return nil
 }
 
 // Broadcast sends message to all active sessions in the named swarm.
@@ -73,7 +82,9 @@ func (m *Manager) Broadcast(ctx context.Context, swarmName, message string) erro
 	if err != nil {
 		return err
 	}
+	slog.Info("broadcasting to swarm", "swarm", swarmName, "session_count", len(dbSessions), "message_len", len(message))
 	for _, s := range dbSessions {
+		slog.Debug("broadcast: sending to session", "swarm", swarmName, "session", s.Name)
 		_ = m.sessions.WarmIfCold(ctx, s.ID)
 		sess := m.sessions.ByName(s.Name)
 		if sess != nil {

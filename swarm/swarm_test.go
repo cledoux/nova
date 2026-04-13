@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	"nova/config"
-	"nova/internal/testdiscord"
 	"nova/db"
+	"nova/internal/testdiscord"
 	"nova/session"
 	"nova/swarm"
 )
