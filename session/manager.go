@@ -3,6 +3,7 @@ package session
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"math/rand"
 	"os"
 	"path/filepath"
@@ -65,6 +66,8 @@ func (m *Manager) Spawn(ctx context.Context, opts SpawnOpts) (*Session, error) {
 		name = generateName()
 	}
 
+	slog.Info("spawning session", "name", name, "swarm_id", opts.SwarmID)
+
 	workspace := filepath.Join(m.cfg.SessionRoot, id)
 	if err := os.MkdirAll(workspace, 0o755); err != nil {
 		return nil, fmt.Errorf("create workspace: %w", err)
@@ -75,6 +78,7 @@ func (m *Manager) Spawn(ctx context.Context, opts SpawnOpts) (*Session, error) {
 		catID = m.soloCategoryID
 	}
 
+	slog.Debug("creating Discord channel", "session", name, "category_id", catID)
 	channelID, err := discordhelper.CreateChannel(m.discord, m.cfg.GuildID, catID, name)
 	if err != nil {
 		return nil, fmt.Errorf("create channel: %w", err)
@@ -110,7 +114,10 @@ func (m *Manager) Spawn(ctx context.Context, opts SpawnOpts) (*Session, error) {
 		return nil, err
 	}
 
+	slog.Info("session ready", "name", name, "channel_id", channelID, "workspace", workspace)
+
 	if opts.Task != "" {
+		slog.Debug("sending initial task to session", "session", name, "task_len", len(opts.Task))
 		if err := sess.Send(opts.Task); err != nil {
 			return nil, fmt.Errorf("send initial task: %w", err)
 		}
@@ -128,13 +135,19 @@ func (m *Manager) Kill(name string) error {
 		return fmt.Errorf("session %q not found", name)
 	}
 
+	slog.Info("killing session", "session", name)
 	sess.Terminate()
 
 	if err := m.store.UpdateSessionStatus(sess.ID, StatusTerminated); err != nil {
 		return err
 	}
 
-	return discordhelper.ArchiveChannel(m.discord, m.cfg.GuildID, sess.ChannelID, m.archiveCategoryID)
+	slog.Debug("archiving Discord channel", "session", name, "channel_id", sess.ChannelID)
+	if err := discordhelper.ArchiveChannel(m.discord, m.cfg.GuildID, sess.ChannelID, m.archiveCategoryID); err != nil {
+		return err
+	}
+	slog.Info("session terminated", "session", name)
+	return nil
 }
 
 // WarmIfCold warms a cold session by ID. No-op if already hot.
@@ -146,8 +159,10 @@ func (m *Manager) WarmIfCold(ctx context.Context, id string) error {
 		return fmt.Errorf("session %s not found", id)
 	}
 	if sess.Status == StatusHot {
+		slog.Debug("session already hot, skipping warm", "session", sess.Name)
 		return nil
 	}
+	slog.Info("warming cold session", "session", sess.Name)
 	// Reload ClaudeSID from DB in case it was updated.
 	dbSess, err := m.store.GetSession(id)
 	if err != nil {
@@ -156,7 +171,11 @@ func (m *Manager) WarmIfCold(ctx context.Context, id string) error {
 	sess.ClaudeSID = dbSess.ClaudeSID
 
 	idleTimeout := time.Duration(m.cfg.IdleTimeoutMinutes) * time.Minute
-	return sess.Warm(ctx, m.cfg.ClaudeBin, systemPromptPath(), idleTimeout, m.makeCallbacks(ctx))
+	if err := sess.Warm(ctx, m.cfg.ClaudeBin, systemPromptPath(), idleTimeout, m.makeCallbacks(ctx)); err != nil {
+		return err
+	}
+	slog.Info("session warmed", "session", sess.Name)
+	return nil
 }
 
 // ByChannel returns the session whose Discord channel matches channelID, or nil.
@@ -193,12 +212,24 @@ func (m *Manager) List(swarmID string) []*Session {
 func (m *Manager) makeCallbacks(ctx context.Context) Callbacks {
 	return Callbacks{
 		OnContent: func(channelID, content string) {
-			_ = discordhelper.PostMessage(m.discord, channelID, content)
+			slog.Info("posting response to Discord", "channel_id", channelID, "content_len", len(content))
+			if err := discordhelper.PostMessage(m.discord, channelID, content); err != nil {
+				slog.Error("failed to post message", "channel_id", channelID, "err", err)
+			}
 		},
 		OnDirective: func(sess *Session, d directive.Directive) {
+			slog.Info("handling directive", "session", sess.Name, "type", d.Type)
 			m.handleDirective(ctx, sess, d)
 		},
 		OnIdle: func(sessID string) {
+			m.mu.RLock()
+			sess := m.sessions[sessID]
+			m.mu.RUnlock()
+			name := sessID
+			if sess != nil {
+				name = sess.Name
+			}
+			slog.Info("session went idle", "session", name)
 			_ = m.store.UpdateSessionStatus(sessID, StatusCold)
 		},
 	}
@@ -213,20 +244,25 @@ func (m *Manager) handleDirective(ctx context.Context, src *Session, d directive
 				catID = sw.CategoryID
 			}
 		}
-		_, _ = m.Spawn(ctx, SpawnOpts{
+		slog.Info("directive: spawning session", "from", src.Name, "name", d.Name, "swarm_id", src.SwarmID)
+		if _, err := m.Spawn(ctx, SpawnOpts{
 			Name:       d.Name,
 			SwarmID:    src.SwarmID,
 			Task:       d.Task,
 			CategoryID: catID,
-		})
+		}); err != nil {
+			slog.Error("directive spawn failed", "from", src.Name, "name", d.Name, "err", err)
+		}
 
 	case directive.TypeSend:
 		m.mu.RLock()
 		target := m.byName[d.To]
 		m.mu.RUnlock()
 		if target == nil {
+			slog.Error("directive send: target session not found", "from", src.Name, "to", d.To)
 			return
 		}
+		slog.Info("directive: sending message to session", "from", src.Name, "to", d.To, "message_len", len(d.Message))
 		_ = m.WarmIfCold(ctx, target.ID)
 		_ = target.Send(d.Message)
 
@@ -237,7 +273,10 @@ func (m *Manager) handleDirective(ctx context.Context, src *Session, d directive
 				catID = sw.CategoryID
 			}
 		}
-		_, _ = discordhelper.CreateChannel(m.discord, m.cfg.GuildID, catID, d.Name)
+		slog.Info("directive: creating channel", "from", src.Name, "channel_name", d.Name)
+		if _, err := discordhelper.CreateChannel(m.discord, m.cfg.GuildID, catID, d.Name); err != nil {
+			slog.Error("directive create_channel failed", "from", src.Name, "name", d.Name, "err", err)
+		}
 	}
 }
 
