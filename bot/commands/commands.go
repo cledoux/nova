@@ -76,6 +76,7 @@ func novaCommand() *discordgo.ApplicationCommand {
 					opt("name", "Swarm name", str, true),
 				}},
 			}},
+			{Type: sub, Name: "restart", Description: "Restart the nova bot process (Docker restarts it automatically)"},
 			{Type: sub, Name: "help", Description: "Show available commands"},
 		},
 	}
@@ -115,6 +116,8 @@ func (h *handler) onInteraction(s *discordgo.Session, i *discordgo.InteractionCr
 		h.handleBroadcast(ctx, s, i, sub)
 	case "swarm":
 		h.handleSwarmGroup(ctx, s, i, sub)
+	case "restart":
+		h.handleRestart(s, i)
 	case "help":
 		h.handleHelp(s, i)
 	}
@@ -260,6 +263,11 @@ func (h *handler) handleBroadcast(ctx context.Context, s *discordgo.Session, i *
 	respondEphemeral(s, i, fmt.Sprintf("Broadcast sent to **%s**.", swarmName))
 }
 
+func (h *handler) handleRestart(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	respondEphemeral(s, i, "Restarting nova...")
+	h.sessions.Restart(i.ChannelID)
+}
+
 func (h *handler) handleHelp(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	const msg = "```\n" +
 		"/nova spawn [name] [swarm]   Spawn a new Claude session\n" +
@@ -271,6 +279,7 @@ func (h *handler) handleHelp(s *discordgo.Session, i *discordgo.InteractionCreat
 		"/nova broadcast <swarm> <msg> Send message to all sessions in a swarm\n" +
 		"/nova swarm create <name>    Create a swarm\n" +
 		"/nova swarm dissolve <name>  Dissolve a swarm\n" +
+		"/nova restart                Restart the nova bot process\n" +
 		"/nova help                   Show this message\n" +
 		"```"
 	respondEphemeral(s, i, msg)

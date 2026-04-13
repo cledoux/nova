@@ -199,6 +199,16 @@ func (m *Manager) Kill(name string) error {
 	return nil
 }
 
+// Restart posts a notice to channelID and then calls RestartFn (default: os.Exit(0)).
+// Docker's restart: unless-stopped policy brings the process back up.
+func (m *Manager) Restart(channelID string) {
+	slog.Info("restart requested", "channel_id", channelID)
+	_ = discordhelper.PostMessage(m.discord, channelID, "Restarting nova... brb")
+	if m.RestartFn != nil {
+		m.RestartFn()
+	}
+}
+
 // WarmIfCold warms a cold session by ID. No-op if already hot.
 func (m *Manager) WarmIfCold(ctx context.Context, id string) error {
 	m.mu.RLock()
