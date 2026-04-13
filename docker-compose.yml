@@ -1,0 +1,10 @@
+services:
+  nova:
+    build: .
+    restart: unless-stopped
+    working_dir: /workspace
+    volumes:
+      - ${HOME}/.claude:/home/agent/.claude
+      - ${HOME}/.nova:/home/agent/.nova
+      - .:/workspace
+    command: /workspace/bin/nova --config /home/agent/.nova/config.toml

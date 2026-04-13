@@ -16,3 +16,20 @@ restart:
 
 logs:
 	journalctl --user -u nova -f
+
+# Docker compose targets (container survives machine restarts)
+
+build-image: build
+	docker compose build
+
+up: build-image
+	docker compose up -d
+
+down:
+	docker compose down
+
+logs-docker:
+	docker compose logs -f
+
+restart-docker:
+	docker compose restart nova

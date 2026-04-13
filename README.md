@@ -75,16 +75,34 @@ A swarm is a named group of sessions that share a Discord category. Agents withi
 
 ### Docker (recommended)
 
+Runs nova in a container that survives machine restarts.
+
 ```sh
-# List host paths to mount into the container (one per line) in sandbox.conf
-echo "/home/user/myproject" > sandbox.conf
+# Build image, build nova binary, and start the container (detached)
+just up
 
-# Build and start
-just start
+# Tail logs
+just logs-docker
 
-# Logs
-just logs
+# Stop
+just down
+
+# Restart without rebuilding (e.g. after a config change)
+just restart-docker
 ```
+
+Volumes mounted into the container:
+
+| Host path | Container path | Purpose |
+|-----------|---------------|---------|
+| `~/.claude` | `/home/agent/.claude` | Claude Code auth |
+| `~/.nova` | `/home/agent/.nova` | Config and session data |
+| nova source dir | `/workspace` | Nova source (writable for self-improvement) |
+
+Nova and its Claude subprocesses run as a non-root `agent` user (UID 1000).
+
+To apply self-improvements made by an agent to the running bot: `just up`
+(rebuilds the binary from the modified source and restarts the container).
 
 ### systemd (user service)
 
