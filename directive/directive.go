@@ -14,6 +14,7 @@ const (
 	TypeSend          Type = "send"
 	TypeCreateChannel Type = "create_channel"
 	TypeDone          Type = "done"
+	TypeRestart       Type = "restart"
 )
 
 // Directive is a parsed swarm control instruction from a Claude agent.

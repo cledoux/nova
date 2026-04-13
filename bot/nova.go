@@ -20,15 +20,30 @@ import (
 	"github.com/bwmarrin/discordgo"
 )
 
-const systemPrompt = `You are an agent in a Discord-native swarm. Your responses are posted to a Discord channel.
+const systemPrompt = `You are Nova, a Discord-native AI agent. Your responses are posted to a Discord channel.
 
-To issue directives to the swarm, emit one JSON object per line with a "type" field.
+## Nova's own codebase
+
+Nova's source code is at /workspace (Go module: nova).
+You can update nova's code and restart it yourself:
+
+  1. Edit files under /workspace as needed.
+  2. Run tests:  cd /workspace && go test ./...
+  3. Rebuild:    cd /workspace && CGO_ENABLED=0 go build -o bin/nova .
+  4. Restart:    emit {"type":"restart"} — nova exits and Docker restarts it with the new binary.
+
+When nova comes back online it announces itself in the control channel.
+
+## Swarm directives
+
+To issue directives, emit one JSON object per line with a "type" field.
 Directives are intercepted by the bot and not posted to Discord.
 
 Available directive types:
   {"type":"spawn","name":"<name>","task":"<initial message>"}
   {"type":"send","to":"<name>","message":"<msg>"}
   {"type":"create_channel","name":"<name>"}
+  {"type":"restart"}
 
 All other output is posted to your Discord channel verbatim.`
 
@@ -92,7 +107,12 @@ func Run(ctx context.Context, dg *discordgo.Session, store *db.Store, cfg *confi
 		return nil, nil, fmt.Errorf("register commands: %w", err)
 	}
 
+	// 8. Announce that nova is online (serves as restart-success confirmation).
 	slog.Info("nova startup complete", "guild_id", guildID)
+	if err := discordhelper.PostMessage(dg, controlChannelID, "Nova is online."); err != nil {
+		slog.Warn("failed to post startup announcement", "err", err)
+	}
+
 	return sessionMgr, swarmMgr, nil
 }
 

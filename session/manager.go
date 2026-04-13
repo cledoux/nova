@@ -39,6 +39,10 @@ type Manager struct {
 	cfg               *config.Config
 	soloCategoryID    string
 	archiveCategoryID string
+
+	// RestartFn is called when a restart directive is received. Defaults to
+	// os.Exit(0) so Docker / the process supervisor restarts the binary.
+	RestartFn func()
 }
 
 // NewManager creates a Manager. soloCategoryID and archiveCategoryID are the
@@ -53,6 +57,7 @@ func NewManager(store *db.Store, discord discordhelper.Client, cfg *config.Confi
 		cfg:               cfg,
 		soloCategoryID:    soloCategoryID,
 		archiveCategoryID: archiveCategoryID,
+		RestartFn:         func() { os.Exit(0) },
 	}
 }
 
@@ -320,6 +325,13 @@ func (m *Manager) handleDirective(ctx context.Context, src *Session, d directive
 		slog.Info("directive: creating channel", "from", src.Name, "channel_name", d.Name)
 		if _, err := discordhelper.CreateChannel(m.discord, m.cfg.GuildID, catID, d.Name); err != nil {
 			slog.Error("directive create_channel failed", "from", src.Name, "name", d.Name, "err", err)
+		}
+
+	case directive.TypeRestart:
+		slog.Info("directive: restart requested", "from", src.Name)
+		_ = discordhelper.PostMessage(m.discord, src.ChannelID, "Restarting nova... brb")
+		if m.RestartFn != nil {
+			m.RestartFn()
 		}
 	}
 }
