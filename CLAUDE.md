@@ -43,7 +43,7 @@ Module name is `nova`. Packages are flat at the repo root:
 
 - **Pre-assigned session IDs**: `Manager.Spawn` generates a UUID and passes it as `--session-id` to the Claude CLI. This avoids directory diffing to discover the session ID after launch.
 - **Generation counter**: Each `Session.Warm()` call increments `gen`. Background goroutines capture their generation at start and call `coolIfGen(gen)` instead of `cool()` to prevent stale goroutines from interfering after a re-warm.
-- **Directive protocol**: Claude agents emit one JSON object per line. Lines starting with `{` are intercepted and not posted to Discord. Lines not starting with `{` are buffered as content. `{"type":"done"}` flushes the buffer to Discord.
+- **Directive protocol**: Claude agents emit one JSON object per line. Lines starting with `{` are intercepted and not posted to Discord. Lines not starting with `{` are buffered as content. `{"type":"done"}` flushes the buffer to Discord. `{"type":"restart"}` posts a notice to Discord then calls `os.Exit(0)`; Docker's `restart: unless-stopped` brings the process back up.
 - **`cool()` before `OnIdle()`**: The session status is set to cold *before* calling the `OnIdle` callback so that any code in the callback that checks status sees the correct value.
 
 ## Pitfalls

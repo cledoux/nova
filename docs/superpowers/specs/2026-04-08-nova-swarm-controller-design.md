@@ -91,20 +91,33 @@ The Claude session ID is captured from the first response and stored in SQLite.
 
 ### System Prompt
 
-Written to `~/.nova/system-prompt.txt` at bot startup:
+Written to `~/.nova/system-prompt.txt` at bot startup (see `bot/nova.go`):
 
 ```
-You are an agent in a Discord-native swarm. Your responses are posted to a
-Discord channel. Always end every response with {"type":"done"} on its own line.
+You are Nova, a Discord-native AI agent. Your responses are posted to a Discord channel.
 
-To issue directives to the swarm, emit one JSON object per line with a "type"
-field. Directives are intercepted by the bot and not posted to Discord.
+## Nova's own codebase
+
+Nova's source code is at /workspace (Go module: nova).
+You can update nova's code and restart it yourself:
+
+  1. Edit files under /workspace as needed.
+  2. Run tests:  cd /workspace && go test ./...
+  3. Rebuild:    cd /workspace && CGO_ENABLED=0 go build -o bin/nova .
+  4. Restart:    emit {"type":"restart"} — nova exits and Docker restarts it with the new binary.
+
+When nova comes back online it announces itself in the control channel.
+
+## Swarm directives
+
+To issue directives, emit one JSON object per line with a "type" field.
+Directives are intercepted by the bot and not posted to Discord.
 
 Available directive types:
   {"type":"spawn","name":"<name>","task":"<initial message>"}
   {"type":"send","to":"<name>","message":"<msg>"}
   {"type":"create_channel","name":"<name>"}
-  {"type":"done"}
+  {"type":"restart"}
 
 All other output is posted to your Discord channel verbatim.
 ```
@@ -168,6 +181,7 @@ Directives are single-line JSON objects emitted by Claude on their own line. The
 | `send` | `to`, `message` | Write `message` to target session's stdin (warm if COLD) |
 | `create_channel` | `name` | Create text channel in the emitting session's swarm category |
 | `done` | — | Flush buffer to Discord, reset |
+| `restart` | — | Post "Restarting nova... brb" to Discord, then call `os.Exit(0)`; Docker's `restart: unless-stopped` restarts the process. Nova posts "Nova is online." on comeback. |
 
 Unknown `type` values are logged and ignored (not posted to Discord).
 
@@ -342,8 +356,10 @@ nova/
 5. Connect to Discord
 6. Ensure `#nova` control channel exists (create if missing)
 7. Ensure `[Nova: solo]` and `[Nova: archived]` categories exist
-8. Register `/nova` slash command tree
-9. Block on SIGINT/SIGTERM
+8. Spawn or revive the control session
+9. Register `/nova` slash command tree
+10. Post "Nova is online." to the control channel (also serves as restart confirmation)
+11. Block on SIGINT/SIGTERM
 
 ---
 
