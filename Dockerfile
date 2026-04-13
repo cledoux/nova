@@ -25,18 +25,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     htop \
     && rm -rf /var/lib/apt/lists/*
 
-# Node.js via NodeSource
-RUN curl -fsSL https://deb.nodesource.com/setup_${NODE_MAJOR}.x | bash - \
-    && apt-get install -y --no-install-recommends nodejs \
-    && rm -rf /var/lib/apt/lists/*
-
 # Go
 RUN curl -fsSL https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz \
     | tar -C /usr/local -xz
 ENV PATH=$PATH:/usr/local/go/bin
-
-# Claude Code (global, installed as root before switching user)
-RUN npm install -g @anthropic-ai/claude-code
 
 # Non-root user — UID 1000 matches most primary Linux users for clean volume permissions
 RUN useradd -m -u 1000 -s /bin/bash agent
@@ -49,3 +41,6 @@ ENV GOPATH=/home/agent/go
 ENV PATH=$PATH:/home/agent/go/bin:/home/agent/.local/bin
 ENV PIPX_HOME=/home/agent/.pipx
 ENV PIPX_BIN_DIR=/home/agent/.local/bin
+
+# Claude Code — installed as agent so it lands in /home/agent/.local/bin (already in PATH)
+RUN curl -fsSL https://claude.ai/install.sh | bash
