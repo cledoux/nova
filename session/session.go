@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"os/exec"
 	"strings"
 	"sync"
@@ -77,6 +78,13 @@ func (s *Session) Warm(ctx context.Context, claudeBin, systemPromptPath string, 
 	}
 
 	args := buildArgs(s.ClaudeSID, systemPromptPath)
+	slog.Debug("starting claude subprocess",
+		"session", s.Name,
+		"bin", claudeBin,
+		"workspace", s.Workspace,
+		"resume", s.ClaudeSID != "",
+		"idle_timeout", idleTimeout,
+	)
 	cmd := exec.CommandContext(ctx, claudeBin, args...)
 	cmd.Dir = s.Workspace
 
@@ -100,6 +108,7 @@ func (s *Session) Warm(ctx context.Context, claudeBin, systemPromptPath string, 
 	s.msgCh = make(chan string, 8)
 	s.callbacks = cb
 	s.Status = StatusHot
+	slog.Debug("claude subprocess started", "session", s.Name, "pid", cmd.Process.Pid, "gen", gen)
 
 	go s.readLoop(gen)
 	go s.writeLoop(gen, idleTimeout)
@@ -171,6 +180,7 @@ func (s *Session) cool() {
 	if s.Status != StatusHot {
 		return
 	}
+	slog.Debug("cooling session", "session", s.Name)
 	s.stopSubprocess()
 	s.Status = StatusCold
 }
@@ -179,9 +189,14 @@ func (s *Session) cool() {
 func (s *Session) coolIfGen(gen int64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.gen != gen || s.Status != StatusHot {
+	if s.gen != gen {
+		slog.Debug("coolIfGen: stale generation, ignoring", "session", s.Name, "gen", gen, "current_gen", s.gen)
 		return
 	}
+	if s.Status != StatusHot {
+		return
+	}
+	slog.Debug("cooling session (gen match)", "session", s.Name, "gen", gen)
 	s.stopSubprocess()
 	s.Status = StatusCold
 }
@@ -208,6 +223,7 @@ func (s *Session) readLoop(gen int64) {
 			isActive := s.gen == gen
 			s.mu.Unlock()
 			if isActive {
+				slog.Debug("readLoop: subprocess stdout closed, flushing and cooling", "session", s.Name)
 				if content := strings.TrimSpace(buf.String()); content != "" {
 					s.callbacks.OnContent(s.ChannelID, content)
 				}
@@ -220,21 +236,26 @@ func (s *Session) readLoop(gen int64) {
 		d, parseErr := directive.Parse(trimmed)
 		if parseErr != nil {
 			// Malformed JSON that starts with '{' — treat as content.
+			slog.Debug("readLoop: malformed JSON treated as content", "session", s.Name, "line", trimmed)
 			buf.WriteString(line)
 			continue
 		}
 		if d != nil {
 			switch d.Type {
 			case directive.TypeDone:
-				if content := strings.TrimSpace(buf.String()); content != "" {
+				content := strings.TrimSpace(buf.String())
+				slog.Debug("readLoop: done directive, flushing content", "session", s.Name, "content_len", len(content))
+				if content != "" {
 					s.callbacks.OnContent(s.ChannelID, content)
 				}
 				buf.Reset()
 			default:
+				slog.Debug("readLoop: intercepted directive", "session", s.Name, "type", d.Type)
 				s.callbacks.OnDirective(s, *d)
 			}
 			continue
 		}
+		slog.Debug("readLoop: content line", "session", s.Name, "len", len(trimmed))
 		buf.WriteString(line)
 	}
 }
@@ -261,6 +282,7 @@ func (s *Session) writeLoop(gen int64, idleTimeout time.Duration) {
 				}
 			}
 			timer.Reset(idleTimeout)
+			slog.Debug("writeLoop: sending message to subprocess", "session", s.Name, "msg_len", len(msg))
 			s.mu.Lock()
 			stdin := s.stdin
 			s.mu.Unlock()
@@ -270,6 +292,7 @@ func (s *Session) writeLoop(gen int64, idleTimeout time.Duration) {
 			fmt.Fprintln(stdin, msg)
 
 		case <-timer.C:
+			slog.Debug("writeLoop: idle timeout fired", "session", s.Name, "timeout", idleTimeout)
 			s.coolIfGen(gen)
 			s.callbacks.OnIdle(s.ID)
 			return
