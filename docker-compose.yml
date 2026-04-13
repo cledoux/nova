@@ -5,8 +5,8 @@ services:
     working_dir: /workspace
     volumes:
       - agent-home:/home/agent
-      - ${HOME}/.claude:/home/agent/.claude
-      - ${HOME}/.nova:/home/agent/.nova
+      - ./mounts/claude:/home/agent/.claude
+      - ./mounts/nova:/home/agent/.nova
       - .:/workspace
     command: /workspace/bin/nova --config /home/agent/.nova/config.toml
 

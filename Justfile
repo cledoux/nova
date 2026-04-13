@@ -33,4 +33,18 @@ shell:
 	docker compose exec nova /bin/bash
 
 claude:
-	docker compose exec nova claude --dangerously-skip-permissions
+	docker compose exec nova claude --dangerously-skip-permissions -c
+
+# Copy Claude config from ~/.claude into mounts/claude/ (re-runnable)
+bootstrap-claude:
+	rsync -a --delete \
+		--include='.credentials.json' \
+		--include='settings.json' \
+		--include='keybindings.json' \
+		--include='statusline-command.sh' \
+		--include='plugins/' \
+		--include='plugins/**' \
+		--exclude='*' \
+		~/.claude/ mounts/claude/
+	sed -i 's|/home/cledoux/.claude/|/home/agent/.claude/|g' mounts/claude/settings.json
+	sed -i 's|/home/cledoux/.claude/|/home/agent/.claude/|g' mounts/claude/plugins/*.json
