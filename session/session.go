@@ -3,6 +3,7 @@ package session
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -49,6 +50,7 @@ type Session struct {
 	cmd       *exec.Cmd
 	stdin     io.WriteCloser
 	stdout    *bufio.Reader
+	stderrBuf *bytes.Buffer // captures subprocess stderr; read after Wait()
 	msgCh     chan string
 }
 
@@ -98,6 +100,8 @@ func (s *Session) Warm(ctx context.Context, claudeBin, systemPromptPath string, 
 	if err != nil {
 		return fmt.Errorf("stdout pipe: %w", err)
 	}
+	stderrBuf := &bytes.Buffer{}
+	cmd.Stderr = stderrBuf
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("start claude: %w", err)
 	}
@@ -107,6 +111,7 @@ func (s *Session) Warm(ctx context.Context, claudeBin, systemPromptPath string, 
 	s.cmd = cmd
 	s.stdin = stdin
 	s.stdout = bufio.NewReader(stdoutPipe)
+	s.stderrBuf = stderrBuf
 	s.msgCh = make(chan string, 8)
 	s.callbacks = cb
 	s.Status = StatusHot
@@ -176,7 +181,14 @@ func (s *Session) Terminate() {
 func (s *Session) stopSubprocess() {
 	if s.cmd != nil && s.cmd.Process != nil {
 		s.cmd.Process.Signal(syscall.SIGTERM)
-		s.cmd.Wait()
+		if err := s.cmd.Wait(); err != nil {
+			stderr := strings.TrimSpace(s.stderrBuf.String())
+			slog.Error("claude subprocess exited with error",
+				"session", s.Name,
+				"err", err,
+				"stderr", stderr,
+			)
+		}
 		s.cmd = nil
 	}
 	if s.stdin != nil {
