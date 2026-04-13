@@ -56,6 +56,44 @@ func NewManager(store *db.Store, discord discordhelper.Client, cfg *config.Confi
 	}
 }
 
+// SpawnOrRevive creates a new session, or if a session with opts.Name already
+// exists in the DB (e.g. after a restart), loads and warms that existing record.
+func (m *Manager) SpawnOrRevive(ctx context.Context, opts SpawnOpts) (*Session, error) {
+	if opts.Name != "" {
+		if dbSess, err := m.store.GetSessionByName(opts.Name); err == nil {
+			slog.Info("reviving existing session", "name", opts.Name, "id", dbSess.ID)
+			if err := m.revive(ctx, dbSess); err != nil {
+				return nil, err
+			}
+			m.mu.RLock()
+			sess := m.sessions[dbSess.ID]
+			m.mu.RUnlock()
+			return sess, nil
+		}
+	}
+	return m.Spawn(ctx, opts)
+}
+
+// revive loads a DB session record into memory and warms it as a resume.
+func (m *Manager) revive(ctx context.Context, dbSess db.Session) error {
+	sess := New(dbSess.ID, dbSess.Name, dbSess.Workspace, dbSess.ChannelID, dbSess.SwarmID)
+	sess.ClaudeSID = dbSess.ClaudeSID
+	// gen=1 so that Warm uses --resume: the Claude session already exists on disk.
+	sess.gen = 1
+
+	m.mu.Lock()
+	m.sessions[dbSess.ID] = sess
+	m.byName[dbSess.Name] = sess
+	m.byChan[dbSess.ChannelID] = sess
+	m.mu.Unlock()
+
+	idleTimeout := time.Duration(m.cfg.IdleTimeoutMinutes) * time.Minute
+	if err := sess.Warm(ctx, m.cfg.ClaudeBin, systemPromptPath(), idleTimeout, m.makeCallbacks(ctx)); err != nil {
+		return fmt.Errorf("warm: %w", err)
+	}
+	return m.store.UpdateSessionStatus(dbSess.ID, StatusHot)
+}
+
 // Spawn creates a new session: workspace, Discord channel, DB record, subprocess.
 func (m *Manager) Spawn(ctx context.Context, opts SpawnOpts) (*Session, error) {
 	id := uuid.New().String()

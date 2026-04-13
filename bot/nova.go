@@ -75,9 +75,9 @@ func Run(ctx context.Context, dg *discordgo.Session, store *db.Store, cfg *confi
 	sessionMgr := session.NewManager(store, dg, cfg, soloCatID, archiveCatID)
 	swarmMgr := swarm.NewManager(store, dg, sessionMgr, guildID)
 
-	// 5. Spawn the control session attached to the existing control channel.
-	slog.Info("spawning control session", "name", cfg.ControlChannelName, "channel_id", controlChannelID)
-	if _, err := sessionMgr.Spawn(ctx, session.SpawnOpts{
+	// 5. Spawn (or revive on restart) the control session.
+	slog.Info("ensuring control session", "name", cfg.ControlChannelName, "channel_id", controlChannelID)
+	if _, err := sessionMgr.SpawnOrRevive(ctx, session.SpawnOpts{
 		Name:      cfg.ControlChannelName,
 		ChannelID: controlChannelID,
 	}); err != nil {
