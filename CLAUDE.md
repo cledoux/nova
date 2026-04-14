@@ -1,5 +1,9 @@
 # Nova — Claude Code guidance
 
+## Backlog
+
+Features and bugs are tracked in [`BACKLOG.md`](BACKLOG.md) at the repo root. Check it when looking for work to do.
+
 ## Build and test
 
 ```sh
