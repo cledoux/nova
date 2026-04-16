@@ -115,7 +115,14 @@ func (m *Manager) revive(ctx context.Context, dbSess db.Session) error {
 	if err := sess.Warm(ctx, m.cfg.ClaudeBin, systemPromptPath(), idleTimeout, m.makeCallbacks(ctx)); err != nil {
 		return fmt.Errorf("warm: %w", err)
 	}
-	return m.store.UpdateSessionStatus(dbSess.ID, StatusHot)
+	if err := m.store.UpdateSessionStatus(dbSess.ID, StatusHot); err != nil {
+		return err
+	}
+	slog.Debug("sending resume prompt", "session", dbSess.Name)
+	if err := sess.Send(m.resumePrompt()); err != nil {
+		return fmt.Errorf("send resume prompt: %w", err)
+	}
+	return nil
 }
 
 // Spawn creates a new session: workspace, Discord channel, DB record, subprocess.
@@ -365,6 +372,20 @@ func (m *Manager) bootPrompt() string {
 		"You are starting fresh. Read the git log in %s to orient yourself — "+
 			"understand what the project does and what changed recently. "+
 			`Reply only with {"type":"done"}; do not post any other output.`,
+		m.cfg.RepoPath,
+	)
+}
+
+// resumePrompt returns the message sent after a session is revived following a
+// restart. It asks Claude to check for unfinished work and pick up if needed,
+// or stay silent with {"type":"done"} if there is nothing to resume.
+func (m *Manager) resumePrompt() string {
+	return fmt.Sprintf(
+		"Nova has just restarted and your session has been revived. "+
+			"Check `git log` and `git status` in %s to see if there is any work in progress "+
+			"that was interrupted by the restart. "+
+			"If you were in the middle of something, pick up where you left off and let the user know. "+
+			`If everything looks complete and there is nothing to resume, reply only with {"type":"done"} and do not post anything.`,
 		m.cfg.RepoPath,
 	)
 }
