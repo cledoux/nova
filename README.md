@@ -2,7 +2,7 @@
 
 <img src="img/nova_icon.png" alt="Nova icon" width="200" align="right" />
 
-Nova is a Discord bot that spawns and orchestrates [Claude Code](https://claude.ai/code) CLI subprocesses. Each session gets its own Discord channel; you chat with the agent by typing in that channel, and the agent can spawn additional agents, send them messages, and create new channels — all via a JSON directive protocol embedded in its output.
+Nova is a Discord bot that runs a [Claude Code](https://claude.ai/code) CLI subprocess as a persistent agent. You interact with it by chatting in its `#nova` channel, or by @-mentioning it in any channel (Nova replies in-place). Additional sessions can be spawned via `/nova spawn`; each gets its own Discord channel.
 
 ## Requirements
 
@@ -27,7 +27,7 @@ EOF
 nova
 ```
 
-Nova will create a `#nova` control channel in your server and a **Nova: solo** category for solo sessions. Use `/nova spawn` to start your first agent.
+Nova will create (or reuse) a `#nova` channel in your server and announce itself there.
 
 ## Configuration
 
@@ -49,15 +49,14 @@ All commands are under `/nova` and respond ephemerally (only visible to you).
 
 | Command | Description |
 |---------|-------------|
-| `/nova spawn [name] [swarm]` | Spawn a new Claude session |
-| `/nova list [swarm]` | List active sessions |
-| `/nova kill <name>` | Terminate a session and archive its channel |
+| `/nova spawn [name]` | Spawn a new Claude session |
+| `/nova list` | List active sessions |
+| `/nova kill <name>` | Terminate a session |
 | `/nova resume <name>` | Force-warm a cold session |
 | `/nova status <name>` | Show session details (status, workspace, message count) |
 | `/nova clean` | Delete workspaces of terminated sessions |
-| `/nova broadcast <swarm> <message>` | Send a message to all sessions in a swarm |
-| `/nova swarm create <name>` | Create a swarm (gets its own Discord category) |
-| `/nova swarm dissolve <name>` | Kill all sessions in a swarm and remove it |
+| `/nova restart` | Restart the nova bot process |
+| `/nova help` | Show command reference |
 
 ## Session lifecycle
 
@@ -65,17 +64,26 @@ Sessions have three states:
 
 - **hot** — Claude subprocess is running; messages route to its stdin immediately.
 - **cold** — subprocess exited after the idle timeout; resumes automatically on next message using `claude --resume <id>`.
-- **terminated** — permanently stopped; Discord channel is archived and made read-only.
+- **terminated** — permanently stopped via `/nova kill`.
 
-## Swarms
+## @mention routing
 
-A swarm is a named group of sessions that share a Discord category. Agents within a swarm can spawn additional agents and send messages to each other by name using the directive protocol. Create one with `/nova swarm create <name>`, then `/nova spawn --swarm <name>` to add sessions.
+Mentioning Nova in any channel (or including "nova" in your message) triggers a response directly in that channel. The first mention spawns a dedicated session bound to that channel; subsequent mentions resume the same session.
+
+## Directive protocol
+
+Nova emits responses as plain text. It can also emit JSON directives on their own line to control its own process:
+
+```
+{"type":"restart"}   — nova exits; Docker restarts it with the same binary
+{"type":"done"}      — no-op (turn completion is signalled by the stream-json protocol)
+```
+
+Directive lines are intercepted and never posted to Discord.
 
 ## Deployment
 
 ### Docker (recommended)
-
-Runs nova in a container that survives machine restarts.
 
 ```sh
 # Build image, build nova binary, and start the container (detached)
@@ -91,18 +99,9 @@ just down
 just restart-docker
 ```
 
-Volumes mounted into the container:
-
-| Host path | Container path | Purpose |
-|-----------|---------------|---------|
-| `~/.claude` | `/home/agent/.claude` | Claude Code auth |
-| `~/.nova` | `/home/agent/.nova` | Config and session data |
-| nova source dir | `/workspace` | Nova source (writable for self-improvement) |
-
 Nova and its Claude subprocesses run as a non-root `agent` user (UID 1000).
 
-To apply self-improvements made by an agent to the running bot: `just up`
-(rebuilds the binary from the modified source and restarts the container).
+To apply self-improvements made by an agent: `just up` (rebuilds the binary from the modified source and restarts the container).
 
 ### systemd (user service)
 
