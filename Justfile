@@ -32,6 +32,8 @@ logs:
 shell:
 	docker compose exec nova /bin/bash
 
+alias cc := claude
+alias cld := claude
 claude:
 	docker compose exec nova claude --dangerously-skip-permissions -c
 
