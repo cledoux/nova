@@ -50,6 +50,12 @@ Module name is `nova`. Packages are flat at the repo root:
 - **Directive protocol**: Claude agents emit one JSON object per line. Lines starting with `{` are intercepted and not posted to Discord. Lines not starting with `{` are buffered as content. `{"type":"done"}` flushes the buffer to Discord. `{"type":"restart"}` posts a notice to Discord then calls `os.Exit(0)`; Docker's `restart: unless-stopped` brings the process back up.
 - **`cool()` before `OnIdle()`**: The session status is set to cold *before* calling the `OnIdle` callback so that any code in the callback that checks status sees the correct value.
 
+## Docker / deployment
+
+- **`docker compose restart` vs `up -d`**: `restart` stops and starts the existing container without re-reading the compose file. Config changes (e.g. `working_dir`, volume mounts, environment) only take effect after `docker compose up -d`, which recreates the container.
+- **SQLite DB location**: `data/nova.db` relative to the container's `working_dir` (`/home/agent/workspace`). To force fresh session creation, delete `data/nova.db` and run `docker compose up -d`.
+- **Versioned Claude config**: specific files in `mounts/claude/` are bind-mounted into `~/.claude/` individually (see `docker-compose.yml`). Add a new line there for each new file to track. Everything else in `~/.claude/` (plugins, session state, credentials) lives in the `agent-home` named volume.
+
 ## Pitfalls
 
 - **`.gitignore` and the `/nova` binary**: The `.gitignore` uses `/nova` (root binary) and `!/nova/` to un-ignore a `nova/` directory. The `nova/` package directory no longer exists, so this is a no-op and can be simplified to just `/nova` if desired.
