@@ -20,6 +20,11 @@ build-image: build prepare-build-image
 up: build-image
 	docker compose up -d
 
+# Rebuild image and do a clean volume reset — use to test fresh-deploy behavior
+rebuild: build-image
+	docker compose down -v
+	docker compose up -d
+
 down:
 	docker compose down
 
