@@ -53,7 +53,8 @@ Module name is `nova`. Packages are flat at the repo root:
 ## Docker / deployment
 
 - **`docker compose restart` vs `up -d`**: `restart` stops and starts the existing container without re-reading the compose file. Config changes (e.g. `working_dir`, volume mounts, environment) only take effect after `docker compose up -d`, which recreates the container.
-- **SQLite DB location**: `data/nova.db` relative to the container's `working_dir` (`/home/agent/workspace`). To force fresh session creation, delete `data/nova.db` and run `docker compose up -d`.
+- **SQLite DB location**: `workspace/data/nova.db` relative to the container's `working_dir` (`/home/agent`), so the live DB is at `/home/agent/workspace/data/nova.db` (inside the repo bind-mount). To force fresh session creation, delete `data/nova.db` and run `docker compose up -d`.
+- **Session workspace**: `repo_path` in `mounts/nova/config.toml` controls the working directory passed to each Claude session (`--workspace` flag and `cmd.Dir`). Currently set to `/home/agent` (home directory). The code default is `/home/agent/workspace`.
 - **Versioned Claude config**: specific files in `mounts/claude/` are bind-mounted into `~/.claude/` individually (see `docker-compose.yml`). Add a new line there for each new file to track. Everything else in `~/.claude/` (plugins, session state, credentials) lives in the `agent-home` named volume.
 
 ## Pitfalls

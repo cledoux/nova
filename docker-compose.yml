@@ -2,7 +2,7 @@ services:
   nova:
     build: .
     restart: unless-stopped
-    working_dir: /home/agent/workspace
+    working_dir: /home/agent
     volumes:
       - agent-home:/home/agent
       - ./mounts/claude/.credentials.json:/home/agent/.claude/.credentials.json

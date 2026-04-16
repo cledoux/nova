@@ -51,7 +51,7 @@ RUN curl -fsSL https://claude.ai/install.sh | bash
 # Seed .claude.json so the first-run wizard is skipped on fresh deploys.
 # Live state accumulates in the agent-home named volume; this only applies
 # when the volume is first created.
-RUN echo '{"numStartups":1,"installMethod":"native","autoUpdates":false,"hasCompletedOnboarding":true,"lastOnboardingVersion":"2.1.110","migrationVersion":11,"opusProMigrationComplete":true,"sonnet1m45MigrationComplete":true,"projects":{"/home/agent/workspace":{"hasTrustDialogAccepted":true}}}' \
+RUN echo '{"numStartups":1,"installMethod":"native","autoUpdates":false,"hasCompletedOnboarding":true,"lastOnboardingVersion":"2.1.110","migrationVersion":11,"opusProMigrationComplete":true,"sonnet1m45MigrationComplete":true,"projects":{"/home/agent":{"hasTrustDialogAccepted":true}}}' \
     > /home/agent/.claude.json
 
 # Vim config and plugins — run prepare-build-image first to stage these files

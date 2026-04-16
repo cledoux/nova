@@ -14,6 +14,7 @@ type Config struct {
 	GuildID            string `toml:"guild_id"`
 	ControlChannelName string `toml:"control_channel_name"`
 	SessionRoot        string `toml:"session_root"`
+	DBPath             string `toml:"db_path"`
 	RepoPath           string `toml:"repo_path"`
 	IdleTimeoutMinutes int    `toml:"idle_timeout_minutes"`
 	ClaudeBin          string `toml:"claude_bin"`
@@ -27,6 +28,7 @@ func Load(path string) (*Config, error) {
 	cfg := &Config{
 		ControlChannelName: "nova",
 		SessionRoot:        filepath.Join(home, ".nova", "sessions"),
+		DBPath:             "data/nova.db",
 		RepoPath:           "/home/agent/workspace",
 		IdleTimeoutMinutes: 10,
 		ClaudeBin:          "claude",

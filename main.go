@@ -42,12 +42,13 @@ func main() {
 		"guild_id", cfg.GuildID,
 		"control_channel", cfg.ControlChannelName,
 		"session_root", cfg.SessionRoot,
+		"db_path", cfg.DBPath,
 		"idle_timeout_min", cfg.IdleTimeoutMinutes,
 		"claude_bin", cfg.ClaudeBin,
 		"debug", cfg.Debug,
 	)
 
-	store, err := novadb.New("data/nova.db")
+	store, err := novadb.New(cfg.DBPath)
 	if err != nil {
 		log.Fatalf("open db: %v", err)
 	}
