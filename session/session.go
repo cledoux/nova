@@ -87,8 +87,9 @@ type Callbacks struct {
 	// OnTurnStart is called when a message is about to be written to the
 	// Claude subprocess stdin — i.e. the moment a turn begins.
 	OnTurnStart func(channelID string)
-	// OnContent is called with the accumulated response when {"type":"done"} is received.
-	OnContent func(channelID, content string)
+	// OnContent is called with the accumulated response when the result event
+	// arrives. thinking contains any thinking blocks from the same turn.
+	OnContent func(channelID, content string, thinking []string)
 	// OnDirective is called for each non-done directive line intercepted from stdout.
 	OnDirective func(sess *Session, d directive.Directive)
 	// OnIdle is called when the idle timer fires, with the session ID.
@@ -104,16 +105,20 @@ type Session struct {
 	ChannelID string
 	Status    string
 
-	mu        sync.Mutex
-	gen       int64 // incremented each Warm call; goroutines check before acting
-	forceNew  bool  // when true, next Warm starts fresh (--session-id) instead of --resume
-	stats     Stats // updated after each completed turn
-	callbacks Callbacks
-	cmd       *exec.Cmd
-	stdin     io.WriteCloser
-	stdout    *bufio.Reader
-	stderrBuf *bytes.Buffer // captures subprocess stderr; read after Wait()
-	msgCh     chan string
+	mu       sync.Mutex
+	gen      int64 // incremented each Warm call; goroutines check before acting
+	forceNew bool  // when true, next Warm starts fresh (--session-id) instead of --resume
+	stats    Stats // updated after each completed turn
+
+	// pendingThinking accumulates thinking blocks from assistant events within
+	// the current turn. Only accessed from readLoop's goroutine; no lock needed.
+	pendingThinking []string
+	callbacks       Callbacks
+	cmd             *exec.Cmd
+	stdin           io.WriteCloser
+	stdout          *bufio.Reader
+	stderrBuf       *bytes.Buffer // captures subprocess stderr; read after Wait()
+	msgCh           chan string
 }
 
 // GetStats returns a snapshot of the most recent turn stats.
@@ -314,6 +319,11 @@ func (s *Session) coolIfGen(gen int64) {
 type streamEvent struct {
 	Type string `json:"type"`
 
+	// assistant event fields.
+	Message struct {
+		Content []contentBlock `json:"content"`
+	} `json:"message"`
+
 	// result event fields.
 	Result       string  `json:"result"`
 	IsError      bool    `json:"is_error"`
@@ -332,6 +342,12 @@ type streamEvent struct {
 
 	// rate_limit_event fields.
 	RateLimitInfo *rateLimitInfo `json:"rate_limit_info"`
+}
+
+// contentBlock is one item in an assistant message's content array.
+type contentBlock struct {
+	Type     string `json:"type"`     // "thinking", "text", "tool_use", etc.
+	Thinking string `json:"thinking"` // present when Type == "thinking"
 }
 
 type rateLimitInfo struct {
@@ -380,6 +396,13 @@ func (s *Session) readLoop(gen int64) {
 		}
 
 		switch event.Type {
+		case "assistant":
+			for _, block := range event.Message.Content {
+				if block.Type == "thinking" && block.Thinking != "" {
+					s.pendingThinking = append(s.pendingThinking, block.Thinking)
+					slog.Debug("readLoop: captured thinking block", "session", s.Name, "len", len(block.Thinking))
+				}
+			}
 		case "result":
 			if event.IsError {
 				slog.Warn("readLoop: result event is error", "session", s.Name, "result", event.Result)
@@ -434,8 +457,13 @@ func (s *Session) applyRateLimitStats(rl *rateLimitInfo) {
 }
 
 // dispatchResult scans the turn result text for directive lines (JSON starting
-// with '{') and posts the remaining content to Discord.
+// with '{') and posts the remaining content to Discord. Thinking blocks
+// accumulated during this turn are passed to OnContent and then cleared.
 func (s *Session) dispatchResult(text string) {
+	// Capture and clear pending thinking before any callbacks fire.
+	thinking := s.pendingThinking
+	s.pendingThinking = nil
+
 	var contentBuf strings.Builder
 	for _, line := range strings.Split(text, "\n") {
 		d, parseErr := directive.Parse(line)
@@ -457,8 +485,9 @@ func (s *Session) dispatchResult(text string) {
 		contentBuf.WriteByte('\n')
 	}
 	if content := strings.TrimSpace(contentBuf.String()); content != "" {
-		slog.Debug("dispatchResult: posting content", "session", s.Name, "content_len", len(content))
-		s.callbacks.OnContent(s.ChannelID, content)
+		slog.Debug("dispatchResult: posting content", "session", s.Name,
+			"content_len", len(content), "thinking_blocks", len(thinking))
+		s.callbacks.OnContent(s.ChannelID, content, thinking)
 	}
 }
 

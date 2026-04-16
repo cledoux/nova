@@ -17,6 +17,7 @@ type Client interface {
 	ChannelMessageSend(channelID, content string, options ...discordgo.RequestOption) (*discordgo.Message, error)
 	ChannelTyping(channelID string, options ...discordgo.RequestOption) error
 	ChannelPermissionSet(channelID, targetID string, targetType discordgo.PermissionOverwriteType, allow, deny int64, options ...discordgo.RequestOption) error
+	MessageThreadStart(channelID, messageID string, name string, archiveDuration int, options ...discordgo.RequestOption) (*discordgo.Channel, error)
 }
 
 // EnsureCategory returns the ID of the category named name in guildID,
@@ -124,17 +125,35 @@ func SetChannelTopic(c Client, channelID, topic string) error {
 }
 
 // PostMessage sends content to channelID, splitting into 2000-char chunks.
-func PostMessage(c Client, channelID, content string) error {
+// Returns the ID of the first message posted (useful for threading).
+func PostMessage(c Client, channelID, content string) (string, error) {
 	const limit = 2000
+	var firstID string
 	for len(content) > 0 {
 		chunk := content
 		if len(chunk) > limit {
 			chunk = content[:limit]
 		}
 		content = content[len(chunk):]
-		if _, err := c.ChannelMessageSend(channelID, chunk); err != nil {
-			return err
+		msg, err := c.ChannelMessageSend(channelID, chunk)
+		if err != nil {
+			return firstID, err
+		}
+		if firstID == "" && msg != nil {
+			firstID = msg.ID
 		}
 	}
-	return nil
+	return firstID, nil
+}
+
+// PostThread creates a thread named name on messageID in channelID, then posts
+// content into it split into 2000-char chunks. The thread auto-archives after
+// 60 minutes of inactivity.
+func PostThread(c Client, channelID, messageID, name, content string) error {
+	thread, err := c.MessageThreadStart(channelID, messageID, name, 60)
+	if err != nil {
+		return fmt.Errorf("create thread: %w", err)
+	}
+	_, err = PostMessage(c, thread.ID, content)
+	return err
 }

@@ -7,6 +7,7 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -222,11 +223,20 @@ func (m *Manager) Kill(name string) error {
 	return nil
 }
 
+// postThinkingThread creates a thread on messageID and posts thinking blocks into it.
+func (m *Manager) postThinkingThread(channelID, messageID string, thinking []string) {
+	combined := strings.Join(thinking, "\n\n---\n\n")
+	slog.Info("posting thinking thread", "channel_id", channelID, "message_id", messageID, "len", len(combined))
+	if err := discordhelper.PostThread(m.discord, channelID, messageID, "💭 Thinking", combined); err != nil {
+		slog.Error("failed to post thinking thread", "channel_id", channelID, "err", err)
+	}
+}
+
 // Restart posts a notice to channelID and then calls RestartFn (default: os.Exit(0)).
 // Docker's restart: unless-stopped policy brings the process back up.
 func (m *Manager) Restart(channelID string) {
 	slog.Info("restart requested", "channel_id", channelID)
-	_ = discordhelper.PostMessage(m.discord, channelID, "Restarting nova... brb")
+	_, _ = discordhelper.PostMessage(m.discord, channelID, "Restarting nova... brb")
 	if m.RestartFn != nil {
 		m.RestartFn()
 	}
@@ -309,11 +319,17 @@ func (m *Manager) makeCallbacks(ctx context.Context) Callbacks {
 		OnTurnStart: func(channelID string) {
 			m.startTyping(ctx, channelID)
 		},
-		OnContent: func(channelID, content string) {
+		OnContent: func(channelID, content string, thinking []string) {
 			m.stopTyping(channelID)
-			slog.Info("posting response to Discord", "channel_id", channelID, "content_len", len(content))
-			if err := discordhelper.PostMessage(m.discord, channelID, content); err != nil {
+			slog.Info("posting response to Discord", "channel_id", channelID,
+				"content_len", len(content), "thinking_blocks", len(thinking))
+			msgID, err := discordhelper.PostMessage(m.discord, channelID, content)
+			if err != nil {
 				slog.Error("failed to post message", "channel_id", channelID, "err", err)
+				return
+			}
+			if len(thinking) > 0 && msgID != "" {
+				go m.postThinkingThread(channelID, msgID, thinking)
 			}
 		},
 		OnDirective: func(sess *Session, d directive.Directive) {
@@ -374,7 +390,7 @@ func (m *Manager) handleDirective(src *Session, d directive.Directive) {
 	switch d.Type {
 	case directive.TypeRestart:
 		slog.Info("directive: restart requested", "from", src.Name)
-		_ = discordhelper.PostMessage(m.discord, src.ChannelID, "Restarting nova... brb")
+		_, _ = discordhelper.PostMessage(m.discord, src.ChannelID, "Restarting nova... brb")
 		if m.RestartFn != nil {
 			m.RestartFn()
 		}

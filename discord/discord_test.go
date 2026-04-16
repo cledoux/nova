@@ -94,7 +94,7 @@ func TestArchiveChannel(t *testing.T) {
 
 func TestPostMessage_short(t *testing.T) {
 	fake := testdiscord.New()
-	if err := discord.PostMessage(fake, "ch-1", "hello"); err != nil {
+	if _, err := discord.PostMessage(fake, "ch-1", "hello"); err != nil {
 		t.Fatalf("PostMessage: %v", err)
 	}
 	if len(fake.Messages) != 1 {
@@ -105,7 +105,7 @@ func TestPostMessage_short(t *testing.T) {
 func TestPostMessage_splits(t *testing.T) {
 	fake := testdiscord.New()
 	long := strings.Repeat("x", 4001)
-	if err := discord.PostMessage(fake, "ch-1", long); err != nil {
+	if _, err := discord.PostMessage(fake, "ch-1", long); err != nil {
 		t.Fatalf("PostMessage: %v", err)
 	}
 	if len(fake.Messages) != 3 {

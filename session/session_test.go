@@ -36,7 +36,7 @@ func TestSession_WarmAndSend(t *testing.T) {
 
 	s := session.New("id-1", "worker", t.TempDir(), "ch-1")
 	err := s.Warm(context.Background(), bin, "", 30*time.Second, session.Callbacks{
-		OnContent:   func(_, content string) { contentCh <- content },
+		OnContent:   func(_, content string, _ []string) { contentCh <- content },
 		OnDirective: func(_ *session.Session, _ directive.Directive) {},
 		OnIdle:      func(_ string) {},
 	})
@@ -77,7 +77,7 @@ func TestSession_DirectiveIntercepted(t *testing.T) {
 
 	s := session.New("id-2", "orch", t.TempDir(), "ch-2")
 	_ = s.Warm(context.Background(), path, "", 30*time.Second, session.Callbacks{
-		OnContent:   func(_, content string) { contentCh <- content },
+		OnContent:   func(_, content string, _ []string) { contentCh <- content },
 		OnDirective: func(_ *session.Session, d directive.Directive) { dirCh <- d },
 		OnIdle:      func(_ string) {},
 	})
@@ -109,7 +109,7 @@ func TestSession_IdleTimer(t *testing.T) {
 
 	s := session.New("id-3", "idle-test", t.TempDir(), "ch-3")
 	_ = s.Warm(context.Background(), bin, "", 100*time.Millisecond, session.Callbacks{
-		OnContent:   func(_, _ string) {},
+		OnContent:   func(_, _ string, _ []string) {},
 		OnDirective: func(_ *session.Session, _ directive.Directive) {},
 		OnIdle:      func(id string) { idleCh <- id },
 	})
@@ -132,7 +132,7 @@ func TestSession_Terminate(t *testing.T) {
 	bin := fakeClaude(t)
 	s := session.New("id-4", "term", t.TempDir(), "ch-4")
 	_ = s.Warm(context.Background(), bin, "", 30*time.Second, session.Callbacks{
-		OnContent:   func(_, _ string) {},
+		OnContent:   func(_, _ string, _ []string) {},
 		OnDirective: func(_ *session.Session, _ directive.Directive) {},
 		OnIdle:      func(_ string) {},
 	})

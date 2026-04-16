@@ -93,6 +93,19 @@ func (s *Session) ChannelPermissionSet(channelID, targetID string, targetType di
 	return nil
 }
 
+func (s *Session) MessageThreadStart(channelID, messageID string, name string, archiveDuration int, options ...discordgo.RequestOption) (*discordgo.Channel, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	ch := &discordgo.Channel{
+		ID:       s.nextID(),
+		Name:     name,
+		Type:     discordgo.ChannelTypeGuildPublicThread,
+		ParentID: channelID,
+	}
+	s.channels[ch.ID] = ch
+	return ch, nil
+}
+
 // GetChannel returns a channel by ID (test helper).
 func (s *Session) GetChannel(id string) (*discordgo.Channel, bool) {
 	s.mu.Lock()

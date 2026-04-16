@@ -92,7 +92,7 @@ func Run(ctx context.Context, dg *discordgo.Session, store *db.Store, cfg *confi
 
 	// 7. Announce that nova is online (serves as restart-success confirmation).
 	slog.Info("nova startup complete", "guild_id", guildID)
-	if err := discordhelper.PostMessage(dg, controlChannelID, "Nova is online."); err != nil {
+	if _, err := discordhelper.PostMessage(dg, controlChannelID, "Nova is online."); err != nil {
 		slog.Warn("failed to post startup announcement", "err", err)
 	}
 
