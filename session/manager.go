@@ -37,6 +37,10 @@ type Manager struct {
 	discord discordhelper.Client
 	cfg     *config.Config
 
+	// typingMu guards typingCancels.
+	typingMu      sync.Mutex
+	typingCancels map[string]context.CancelFunc // channelID → cancel func for typing loop
+
 	// RestartFn is called when a restart directive is received. Defaults to
 	// os.Exit(0) so Docker / the process supervisor restarts the binary.
 	RestartFn func()
@@ -45,13 +49,14 @@ type Manager struct {
 // NewManager creates a Manager.
 func NewManager(store *db.Store, discord discordhelper.Client, cfg *config.Config) *Manager {
 	return &Manager{
-		sessions:  make(map[string]*Session),
-		byName:    make(map[string]*Session),
-		byChan:    make(map[string]*Session),
-		store:     store,
-		discord:   discord,
-		cfg:       cfg,
-		RestartFn: func() { os.Exit(0) },
+		sessions:      make(map[string]*Session),
+		byName:        make(map[string]*Session),
+		byChan:        make(map[string]*Session),
+		typingCancels: make(map[string]context.CancelFunc),
+		store:         store,
+		discord:       discord,
+		cfg:           cfg,
+		RestartFn:     func() { os.Exit(0) },
 	}
 }
 
@@ -174,7 +179,6 @@ func (m *Manager) Spawn(ctx context.Context, opts SpawnOpts) (*Session, error) {
 	if err := m.store.UpdateSessionStatus(id, StatusHot); err != nil {
 		return nil, err
 	}
-
 	slog.Info("session ready", "name", name, "channel_id", channelID, "workspace", workspace)
 
 	// Send boot-time orientation prompt so Claude reads recent git history
@@ -287,7 +291,11 @@ func (m *Manager) List() []*Session {
 
 func (m *Manager) makeCallbacks(ctx context.Context) Callbacks {
 	return Callbacks{
+		OnTurnStart: func(channelID string) {
+			m.startTyping(ctx, channelID)
+		},
 		OnContent: func(channelID, content string) {
+			m.stopTyping(channelID)
 			slog.Info("posting response to Discord", "channel_id", channelID, "content_len", len(content))
 			if err := discordhelper.PostMessage(m.discord, channelID, content); err != nil {
 				slog.Error("failed to post message", "channel_id", channelID, "err", err)
@@ -308,6 +316,42 @@ func (m *Manager) makeCallbacks(ctx context.Context) Callbacks {
 			slog.Info("session went idle", "session", name)
 			_ = m.store.UpdateSessionStatus(sessID, StatusCold)
 		},
+	}
+}
+
+// startTyping begins sending the Discord typing indicator to channelID every 8s
+// until stopTyping is called. Any previous typing loop for the channel is cancelled first.
+func (m *Manager) startTyping(ctx context.Context, channelID string) {
+	ctx, cancel := context.WithCancel(ctx)
+
+	m.typingMu.Lock()
+	if old, ok := m.typingCancels[channelID]; ok {
+		old()
+	}
+	m.typingCancels[channelID] = cancel
+	m.typingMu.Unlock()
+
+	go func() {
+		for {
+			if err := m.discord.ChannelTyping(channelID); err != nil {
+				slog.Warn("ChannelTyping failed", "channel_id", channelID, "err", err)
+			}
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(8 * time.Second):
+			}
+		}
+	}()
+}
+
+// stopTyping cancels the typing indicator loop for channelID.
+func (m *Manager) stopTyping(channelID string) {
+	m.typingMu.Lock()
+	defer m.typingMu.Unlock()
+	if cancel, ok := m.typingCancels[channelID]; ok {
+		cancel()
+		delete(m.typingCancels, channelID)
 	}
 }
 

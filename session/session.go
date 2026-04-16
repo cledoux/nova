@@ -26,6 +26,9 @@ const (
 
 // Callbacks holds functions the session calls during operation.
 type Callbacks struct {
+	// OnTurnStart is called when a message is about to be written to the
+	// Claude subprocess stdin — i.e. the moment a turn begins.
+	OnTurnStart func(channelID string)
 	// OnContent is called with the accumulated response when {"type":"done"} is received.
 	OnContent func(channelID, content string)
 	// OnDirective is called for each non-done directive line intercepted from stdout.
@@ -339,6 +342,9 @@ func (s *Session) writeLoop(gen int64, idleTimeout time.Duration) {
 			}
 			timer.Reset(idleTimeout)
 			slog.Debug("writeLoop: sending message to subprocess", "session", s.Name, "msg_len", len(msg))
+			if s.callbacks.OnTurnStart != nil {
+				s.callbacks.OnTurnStart(s.ChannelID)
+			}
 			s.mu.Lock()
 			stdin := s.stdin
 			s.mu.Unlock()

@@ -85,6 +85,10 @@ func (s *Session) ChannelMessageSend(channelID, content string, options ...disco
 	return &discordgo.Message{ID: s.nextID()}, nil
 }
 
+func (s *Session) ChannelTyping(channelID string, options ...discordgo.RequestOption) error {
+	return nil
+}
+
 func (s *Session) ChannelPermissionSet(channelID, targetID string, targetType discordgo.PermissionOverwriteType, allow, deny int64, options ...discordgo.RequestOption) error {
 	return nil
 }
