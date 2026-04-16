@@ -48,6 +48,12 @@ ENV PIPX_BIN_DIR=/home/agent/.local/bin
 # Claude Code — installed as agent so it lands in /home/agent/.local/bin (already in PATH)
 RUN curl -fsSL https://claude.ai/install.sh | bash
 
+# Seed .claude.json so the first-run wizard is skipped on fresh deploys.
+# Live state accumulates in the agent-home named volume; this only applies
+# when the volume is first created.
+RUN echo '{"numStartups":1,"installMethod":"native","autoUpdates":false,"hasCompletedOnboarding":true,"lastOnboardingVersion":"2.1.110","migrationVersion":11,"opusProMigrationComplete":true,"sonnet1m45MigrationComplete":true,"projects":{"/workspace":{"hasTrustDialogAccepted":true}}}' \
+    > /home/agent/.claude.json
+
 # Vim config and plugins — run prepare-build-image first to stage these files
 COPY --chown=agent:agent build/.vimrc /home/agent/.vimrc
 COPY --chown=agent:agent build/.vim-autoload /home/agent/.vim/autoload
