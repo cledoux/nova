@@ -54,9 +54,11 @@ RUN curl -fsSL https://claude.ai/install.sh | bash
 RUN echo '{"numStartups":1,"installMethod":"native","autoUpdates":false,"hasCompletedOnboarding":true,"lastOnboardingVersion":"2.1.110","migrationVersion":11,"opusProMigrationComplete":true,"sonnet1m45MigrationComplete":true,"projects":{"/home/agent/workspace":{"hasTrustDialogAccepted":true}}}' \
     > /home/agent/.claude.json
 
-# Vim + Claude config — run prepare-build-image first to stage these files
+# Vim config and plugins — run prepare-build-image first to stage these files
 COPY --chown=agent:agent build/.vimrc /home/agent/.vimrc
 COPY --chown=agent:agent build/.vim-autoload /home/agent/.vim/autoload
+
+# Claude config — run prepare-build-image first to stage these files
 COPY --chown=agent:agent build/claude-CLAUDE.md /home/agent/.claude/CLAUDE.md
 RUN vim --cmd "let g:plug_threads=1" -u /home/agent/.vimrc -i NONE -es \
     -c "PlugInstall" -c "qa" < /dev/null || true
