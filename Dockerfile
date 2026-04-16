@@ -48,6 +48,8 @@ ENV PIPX_BIN_DIR=/home/agent/.local/bin
 # Claude Code — installed as agent so it lands in /home/agent/.local/bin (already in PATH)
 RUN curl -fsSL https://claude.ai/install.sh | bash
 
-# Vim config and plugins — run bootstrap-vim first to stage build/.vimrc
+# Vim config and plugins — run prepare-build-image first to stage these files
 COPY --chown=agent:agent build/.vimrc /home/agent/.vimrc
-RUN vim +PlugInstall +qall! 2>&1 | tail -5
+COPY --chown=agent:agent build/.vim-autoload /home/agent/.vim/autoload
+RUN vim --cmd "let g:plug_threads=1" -u /home/agent/.vimrc -i NONE -es \
+    -c "PlugInstall" -c "qa" < /dev/null || true

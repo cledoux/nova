@@ -39,6 +39,7 @@ claude:
 prepare-build-image:
     mkdir -p build
     cp ~/.vimrc build/.vimrc
+    cp -r ~/.vim/autoload build/.vim-autoload
 
 # Copy Claude config from ~/.claude into mounts/claude/ (re-runnable)
 bootstrap-claude:
