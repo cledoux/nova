@@ -369,9 +369,11 @@ func (m *Manager) bootPrompt() string {
 	)
 }
 
-// Reset clears the Claude conversation history for sessID by sending /reset,
-// then requeues the boot orientation prompt.
-func (m *Manager) Reset(sessID string) error {
+// Reset starts a fresh Claude session for sessID: stops the subprocess, assigns
+// a new session ID (discarding conversation history), re-warms, and requeues
+// the boot orientation prompt. /reset is not used because it is not recognised
+// in stream-json pipe mode.
+func (m *Manager) Reset(ctx context.Context, sessID string) error {
 	m.mu.RLock()
 	sess := m.sessions[sessID]
 	m.mu.RUnlock()
@@ -379,8 +381,20 @@ func (m *Manager) Reset(sessID string) error {
 		return fmt.Errorf("session %s not found", sessID)
 	}
 	slog.Info("resetting session context", "session", sess.Name)
-	if err := sess.Send("/reset"); err != nil {
-		return fmt.Errorf("send /reset: %w", err)
+
+	newClaudeSID := uuid.New().String()
+	sess.PrepareReset(newClaudeSID)
+
+	if err := m.store.UpdateSessionClaudeSID(sessID, newClaudeSID); err != nil {
+		return fmt.Errorf("update claude session id: %w", err)
+	}
+
+	idleTimeout := time.Duration(m.cfg.IdleTimeoutMinutes) * time.Minute
+	if err := sess.Warm(ctx, m.cfg.ClaudeBin, systemPromptPath(), idleTimeout, m.makeCallbacks(ctx)); err != nil {
+		return fmt.Errorf("warm after reset: %w", err)
+	}
+	if err := m.store.UpdateSessionStatus(sessID, StatusHot); err != nil {
+		return err
 	}
 	if err := sess.Send(m.bootPrompt()); err != nil {
 		return fmt.Errorf("send boot prompt: %w", err)

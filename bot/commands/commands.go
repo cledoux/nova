@@ -89,7 +89,7 @@ func (h *handler) onInteraction(s *discordgo.Session, i *discordgo.InteractionCr
 	case "status":
 		h.handleStatus(s, i, sub)
 	case "reset":
-		h.handleReset(s, i)
+		h.handleReset(ctx, s, i)
 	case "clean":
 		h.handleClean(s, i)
 	case "restart":
@@ -179,13 +179,13 @@ func (h *handler) handleStatus(s *discordgo.Session, i *discordgo.InteractionCre
 	respondEphemeral(s, i, msg)
 }
 
-func (h *handler) handleReset(s *discordgo.Session, i *discordgo.InteractionCreate) {
+func (h *handler) handleReset(ctx context.Context, s *discordgo.Session, i *discordgo.InteractionCreate) {
 	sess := h.sessions.ByChannel(i.ChannelID)
 	if sess == nil {
 		respondEphemeral(s, i, "No session is bound to this channel.")
 		return
 	}
-	if err := h.sessions.Reset(sess.ID); err != nil {
+	if err := h.sessions.Reset(ctx, sess.ID); err != nil {
 		slog.Error("reset failed", "session", sess.Name, "err", err)
 		respondEphemeral(s, i, fmt.Sprintf("Reset failed: %v", err))
 		return

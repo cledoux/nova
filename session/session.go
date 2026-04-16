@@ -48,6 +48,7 @@ type Session struct {
 
 	mu        sync.Mutex
 	gen       int64 // incremented each Warm call; goroutines check before acting
+	forceNew  bool  // when true, next Warm starts fresh (--session-id) instead of --resume
 	callbacks Callbacks
 	cmd       *exec.Cmd
 	stdin     io.WriteCloser
@@ -81,7 +82,8 @@ func (s *Session) Warm(ctx context.Context, claudeBin, systemPromptPath string, 
 		return fmt.Errorf("session %s is terminated", s.ID)
 	}
 
-	isResume := s.gen > 0
+	isResume := s.gen > 0 && !s.forceNew
+	s.forceNew = false
 	args := buildArgs(s.ClaudeSID, systemPromptPath, isResume)
 	slog.Debug("starting claude subprocess",
 		"session", s.Name,
@@ -168,6 +170,17 @@ func (s *Session) Send(msg string) error {
 	default:
 		return fmt.Errorf("session %q message buffer full", s.Name)
 	}
+}
+
+// PrepareReset cools the session and marks it for a fresh (non-resume) start
+// on the next Warm call. newClaudeSID becomes the new Claude session identity.
+func (s *Session) PrepareReset(newClaudeSID string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.stopSubprocess()
+	s.Status = StatusCold
+	s.ClaudeSID = newClaudeSID
+	s.forceNew = true
 }
 
 // Terminate stops the subprocess and marks the session terminated.
