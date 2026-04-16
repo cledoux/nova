@@ -41,14 +41,19 @@ func EnsureCategory(c Client, guildID, name string) (string, error) {
 }
 
 // EnsureChannel returns the ID of the text channel named name in categoryID,
-// creating it if it does not exist.
+// creating it if it does not exist. If categoryID is empty, the search matches
+// any channel with the given name regardless of its category, and new channels
+// are created at the top level.
 func EnsureChannel(c Client, guildID, categoryID, name string) (string, error) {
 	channels, err := c.GuildChannels(guildID)
 	if err != nil {
 		return "", fmt.Errorf("GuildChannels: %w", err)
 	}
 	for _, ch := range channels {
-		if ch.Type == discordgo.ChannelTypeGuildText && ch.ParentID == categoryID && ch.Name == name {
+		if ch.Type != discordgo.ChannelTypeGuildText || ch.Name != name {
+			continue
+		}
+		if categoryID == "" || ch.ParentID == categoryID {
 			return ch.ID, nil
 		}
 	}

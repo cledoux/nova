@@ -52,6 +52,25 @@ func TestEnsureChannel_idempotent(t *testing.T) {
 	}
 }
 
+// TestEnsureChannel_emptyCategoryFindsExisting verifies that when categoryID is
+// empty, EnsureChannel finds a pre-existing channel regardless of its parent.
+// This is the fix for nova creating a duplicate #nova channel on DB reset.
+func TestEnsureChannel_emptyCategoryFindsExisting(t *testing.T) {
+	fake := testdiscord.New()
+	// Channel already exists in some category.
+	catID, _ := discord.EnsureCategory(fake, guildID, "Some Category")
+	existing, _ := discord.EnsureChannel(fake, guildID, catID, "nova")
+
+	// EnsureChannel with empty categoryID should return the same channel.
+	found, err := discord.EnsureChannel(fake, guildID, "", "nova")
+	if err != nil {
+		t.Fatalf("EnsureChannel: %v", err)
+	}
+	if found != existing {
+		t.Errorf("EnsureChannel created duplicate: got %q, want existing %q", found, existing)
+	}
+}
+
 func TestArchiveChannel(t *testing.T) {
 	fake := testdiscord.New()
 	catID, _ := discord.EnsureCategory(fake, guildID, "Nova: solo")
