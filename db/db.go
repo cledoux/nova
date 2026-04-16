@@ -97,6 +97,16 @@ func (s *Store) GetSessionByName(name string) (Session, error) {
 	))
 }
 
+// GetSessionByChannelID returns the most recently active non-terminated session
+// for the given Discord channel ID.
+func (s *Store) GetSessionByChannelID(channelID string) (Session, error) {
+	return s.scanSession(s.db.QueryRow(
+		`SELECT id, name, claude_sid, workspace, channel_id, status, created_at, last_active
+		 FROM sessions WHERE channel_id = ? AND status != 'terminated'
+		 ORDER BY last_active DESC LIMIT 1`, channelID,
+	))
+}
+
 // ListSessions returns all non-terminated sessions.
 func (s *Store) ListSessions() ([]Session, error) {
 	rows, err := s.db.Query(

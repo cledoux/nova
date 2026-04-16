@@ -121,20 +121,23 @@ func RegisterMessageRouter(dg *discordgo.Session, mgr *session.Manager, cfg *con
 				)
 				return
 			}
-			sess = mgr.ByName(cfg.ControlChannelName)
-			if sess == nil {
-				slog.Warn("bot mentioned in unmanaged channel but no control session exists",
+			// Spawn (or revive) a session bound to this channel so the reply
+			// goes back here rather than to the control channel.
+			slog.Info("@mention in unmanaged channel — ensuring session",
+				"channel_id", m.ChannelID,
+				"author", m.Author.Username,
+			)
+			var err error
+			sess, err = mgr.SpawnOrRevive(ctx, session.SpawnOpts{
+				ChannelID: m.ChannelID,
+			})
+			if err != nil {
+				slog.Error("failed to ensure session for mention channel",
 					"channel_id", m.ChannelID,
-					"author", m.Author.Username,
-					"control_session", cfg.ControlChannelName,
+					"err", err,
 				)
 				return
 			}
-			slog.Info("routing mention in unmanaged channel to control session",
-				"channel_id", m.ChannelID,
-				"author", m.Author.Username,
-				"control_session", cfg.ControlChannelName,
-			)
 		}
 
 		if sess.Status == session.StatusCold {

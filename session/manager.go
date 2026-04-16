@@ -55,21 +55,41 @@ func NewManager(store *db.Store, discord discordhelper.Client, cfg *config.Confi
 	}
 }
 
-// SpawnOrRevive creates a new session, or if a session with opts.Name already
-// exists in the DB (e.g. after a restart), loads and warms that existing record.
+// SpawnOrRevive creates a new session, or if a matching session already exists
+// in the DB (e.g. after a restart), loads and warms that existing record.
+// Lookup is by Name first, then by ChannelID if Name is empty.
 func (m *Manager) SpawnOrRevive(ctx context.Context, opts SpawnOpts) (*Session, error) {
+	var dbSess db.Session
+	var found bool
+
 	if opts.Name != "" {
-		if dbSess, err := m.store.GetSessionByName(opts.Name); err == nil {
-			slog.Info("reviving existing session", "name", opts.Name, "id", dbSess.ID)
-			if err := m.revive(ctx, dbSess); err != nil {
-				return nil, err
-			}
-			m.mu.RLock()
-			sess := m.sessions[dbSess.ID]
-			m.mu.RUnlock()
-			return sess, nil
+		if s, err := m.store.GetSessionByName(opts.Name); err == nil {
+			dbSess, found = s, true
+		}
+	} else if opts.ChannelID != "" {
+		if s, err := m.store.GetSessionByChannelID(opts.ChannelID); err == nil {
+			dbSess, found = s, true
 		}
 	}
+
+	if found {
+		// Check if already in memory (e.g. same session, different code path).
+		m.mu.RLock()
+		existing := m.sessions[dbSess.ID]
+		m.mu.RUnlock()
+		if existing != nil {
+			return existing, nil
+		}
+		slog.Info("reviving existing session", "name", dbSess.Name, "id", dbSess.ID)
+		if err := m.revive(ctx, dbSess); err != nil {
+			return nil, err
+		}
+		m.mu.RLock()
+		sess := m.sessions[dbSess.ID]
+		m.mu.RUnlock()
+		return sess, nil
+	}
+
 	return m.Spawn(ctx, opts)
 }
 
