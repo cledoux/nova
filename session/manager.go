@@ -177,6 +177,20 @@ func (m *Manager) Spawn(ctx context.Context, opts SpawnOpts) (*Session, error) {
 
 	slog.Info("session ready", "name", name, "channel_id", channelID, "workspace", workspace)
 
+	// Send boot-time orientation prompt so Claude reads recent git history
+	// before handling any user requests. Claude is instructed to reply with
+	// {"type":"done"} only so nothing gets posted to Discord.
+	bootMsg := fmt.Sprintf(
+		"You are starting fresh. Read the git log in %s to orient yourself — "+
+			"understand what the project does and what changed recently. "+
+			`Reply only with {"type":"done"}; do not post any other output.`,
+		m.cfg.RepoPath,
+	)
+	slog.Debug("sending boot prompt", "session", name)
+	if err := sess.Send(bootMsg); err != nil {
+		return nil, fmt.Errorf("send boot prompt: %w", err)
+	}
+
 	if opts.Task != "" {
 		slog.Debug("sending initial task to session", "session", name, "task_len", len(opts.Task))
 		if err := sess.Send(opts.Task); err != nil {
