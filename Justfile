@@ -14,7 +14,7 @@ fmt:
 	gofmt -s -w .
 	goimports -w . 2>/dev/null || true
 
-build-image: build
+build-image: build prepare-build-image
 	docker compose build
 
 up: build-image
@@ -34,6 +34,11 @@ shell:
 
 claude:
 	docker compose exec nova claude --dangerously-skip-permissions -c
+
+# Stage files into build/ for inclusion in the Docker image (re-runnable)
+prepare-build-image:
+    mkdir -p build
+    cp ~/.vimrc build/.vimrc
 
 # Copy Claude config from ~/.claude into mounts/claude/ (re-runnable)
 bootstrap-claude:

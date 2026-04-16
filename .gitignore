@@ -1,4 +1,5 @@
 mounts/
+build/
 .claude/
 .worktrees/
 data/
