@@ -181,17 +181,8 @@ func (m *Manager) Spawn(ctx context.Context, opts SpawnOpts) (*Session, error) {
 	}
 	slog.Info("session ready", "name", name, "channel_id", channelID, "workspace", workspace)
 
-	// Send boot-time orientation prompt so Claude reads recent git history
-	// before handling any user requests. Claude is instructed to reply with
-	// {"type":"done"} only so nothing gets posted to Discord.
-	bootMsg := fmt.Sprintf(
-		"You are starting fresh. Read the git log in %s to orient yourself — "+
-			"understand what the project does and what changed recently. "+
-			`Reply only with {"type":"done"}; do not post any other output.`,
-		m.cfg.RepoPath,
-	)
 	slog.Debug("sending boot prompt", "session", name)
-	if err := sess.Send(bootMsg); err != nil {
+	if err := sess.Send(m.bootPrompt()); err != nil {
 		return nil, fmt.Errorf("send boot prompt: %w", err)
 	}
 
@@ -364,6 +355,37 @@ func (m *Manager) handleDirective(src *Session, d directive.Directive) {
 			m.RestartFn()
 		}
 	}
+}
+
+// bootPrompt returns the orientation message sent to Claude on fresh spawn or
+// after a /reset. Claude is instructed to reply with {"type":"done"} so
+// nothing gets posted to Discord.
+func (m *Manager) bootPrompt() string {
+	return fmt.Sprintf(
+		"You are starting fresh. Read the git log in %s to orient yourself — "+
+			"understand what the project does and what changed recently. "+
+			`Reply only with {"type":"done"}; do not post any other output.`,
+		m.cfg.RepoPath,
+	)
+}
+
+// Reset clears the Claude conversation history for sessID by sending /reset,
+// then requeues the boot orientation prompt.
+func (m *Manager) Reset(sessID string) error {
+	m.mu.RLock()
+	sess := m.sessions[sessID]
+	m.mu.RUnlock()
+	if sess == nil {
+		return fmt.Errorf("session %s not found", sessID)
+	}
+	slog.Info("resetting session context", "session", sess.Name)
+	if err := sess.Send("/reset"); err != nil {
+		return fmt.Errorf("send /reset: %w", err)
+	}
+	if err := sess.Send(m.bootPrompt()); err != nil {
+		return fmt.Errorf("send boot prompt: %w", err)
+	}
+	return nil
 }
 
 // systemPromptPath returns ~/.nova/system-prompt.txt.

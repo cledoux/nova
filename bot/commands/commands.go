@@ -57,6 +57,7 @@ func novaCommand() *discordgo.ApplicationCommand {
 			{Type: sub, Name: "status", Description: "Show session status", Options: []*discordgo.ApplicationCommandOption{
 				opt("name", "Session name", str, true),
 			}},
+			{Type: sub, Name: "reset", Description: "Clear Claude context and re-orient from git history"},
 			{Type: sub, Name: "clean", Description: "Delete workspaces of terminated sessions"},
 			{Type: sub, Name: "restart", Description: "Restart the nova bot process (Docker restarts it automatically)"},
 			{Type: sub, Name: "help", Description: "Show available commands"},
@@ -87,6 +88,8 @@ func (h *handler) onInteraction(s *discordgo.Session, i *discordgo.InteractionCr
 		h.handleResume(ctx, s, i, sub)
 	case "status":
 		h.handleStatus(s, i, sub)
+	case "reset":
+		h.handleReset(s, i)
 	case "clean":
 		h.handleClean(s, i)
 	case "restart":
@@ -176,6 +179,21 @@ func (h *handler) handleStatus(s *discordgo.Session, i *discordgo.InteractionCre
 	respondEphemeral(s, i, msg)
 }
 
+func (h *handler) handleReset(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	sess := h.sessions.ByChannel(i.ChannelID)
+	if sess == nil {
+		respondEphemeral(s, i, "No session is bound to this channel.")
+		return
+	}
+	if err := h.sessions.Reset(sess.ID); err != nil {
+		slog.Error("reset failed", "session", sess.Name, "err", err)
+		respondEphemeral(s, i, fmt.Sprintf("Reset failed: %v", err))
+		return
+	}
+	slog.Info("session reset via command", "session", sess.Name)
+	respondEphemeral(s, i, fmt.Sprintf("Context reset for **%s**. Re-orienting...", sess.Name))
+}
+
 func (h *handler) handleClean(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	sessions, err := h.store.ListTerminatedSessions()
 	if err != nil {
@@ -204,6 +222,7 @@ func (h *handler) handleHelp(s *discordgo.Session, i *discordgo.InteractionCreat
 		"/nova resume <name>    Force-warm a cold session\n" +
 		"/nova status <name>    Show session status\n" +
 		"/nova clean            Delete workspaces of terminated sessions\n" +
+		"/nova reset            Clear Claude context and re-orient from git history\n" +
 		"/nova restart          Restart the nova bot process\n" +
 		"/nova help             Show this message\n" +
 		"```"
