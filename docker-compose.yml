@@ -5,6 +5,7 @@ services:
     working_dir: /home/agent/workspace
     volumes:
       - agent-home:/home/agent
+      - ./mounts/claude/.credentials.json:/home/agent/.claude/.credentials.json
       - ./mounts/claude/CLAUDE.md:/home/agent/.claude/CLAUDE.md
       - ./mounts/claude/settings.json:/home/agent/.claude/settings.json
       - ./mounts/claude/statusline-command.sh:/home/agent/.claude/statusline-command.sh
