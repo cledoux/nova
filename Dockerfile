@@ -57,8 +57,5 @@ RUN echo '{"numStartups":1,"installMethod":"native","autoUpdates":false,"hasComp
 # Vim config and plugins — run prepare-build-image first to stage these files
 COPY --chown=agent:agent build/.vimrc /home/agent/.vimrc
 COPY --chown=agent:agent build/.vim-autoload /home/agent/.vim/autoload
-
-# Claude config — run prepare-build-image first to stage these files
-COPY --chown=agent:agent build/claude-CLAUDE.md /home/agent/.claude/CLAUDE.md
 RUN vim --cmd "let g:plug_threads=1" -u /home/agent/.vimrc -i NONE -es \
     -c "PlugInstall" -c "qa" < /dev/null || true

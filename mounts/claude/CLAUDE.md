@@ -4,8 +4,14 @@
 
 - ALWAYS ask before using git commit --amend. Prefer to create new commits
 instead of edit history.
-- ALWAYS commit changes before ending a task or moving on. Do not leave
-modified files uncommitted after completing work.
+- Commit messages are the primary record of historical context and progress.
+  Record the why as well as the what — key decisions, rejected alternatives,
+  and non-obvious constraints are all good examples of the why.
+- Workflow lessons and operational knowledge (e.g. how to restart a service,
+  tool behavior quirks) belong in CLAUDE.md, not in commit messages. Commit
+  messages should be about the specific change, not general process notes.
+- At the start of a session, use `git log` to reconstruct context before
+  asking the user to re-explain history.
 
 ## Go
 
