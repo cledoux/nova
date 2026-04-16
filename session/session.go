@@ -10,6 +10,7 @@ import (
 	"io"
 	"log/slog"
 	"os/exec"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -17,6 +18,63 @@ import (
 
 	"nova/directive"
 )
+
+// Stats holds usage and rate-limit data captured from the most recent turn.
+type Stats struct {
+	// Token counts (from the result event).
+	InputTokens         int
+	CacheReadTokens     int
+	CacheCreationTokens int
+	OutputTokens        int
+	ContextWindow       int // model's max context window size in tokens
+
+	// Cost and timing (from the result event).
+	TotalCostUSD float64
+	DurationMS   int64
+
+	// Rate limit info (from rate_limit_event; zero values = no event seen yet).
+	RateLimitStatus   string    // e.g. "ok", "rejected"
+	RateLimitType     string    // e.g. "five_hour", "seven_day"
+	RateLimitResetsAt time.Time // zero if not set
+	IsUsingOverage    bool
+
+	UpdatedAt time.Time
+}
+
+// ContextTotalTokens returns the total number of tokens occupying the context window.
+func (s Stats) ContextTotalTokens() int {
+	return s.InputTokens + s.CacheReadTokens + s.CacheCreationTokens
+}
+
+// ContextUsedPct returns context window usage as an integer percentage (0–100).
+func (s Stats) ContextUsedPct() int {
+	if s.ContextWindow == 0 {
+		return 0
+	}
+	return s.ContextTotalTokens() * 100 / s.ContextWindow
+}
+
+// FormatBar returns a text progress bar of the given width for the given percentage.
+func FormatBar(pct, width int) string {
+	if pct > 100 {
+		pct = 100
+	}
+	filled := pct * width / 100
+	return strings.Repeat("█", filled) + strings.Repeat("░", width-filled)
+}
+
+// FormatTokens formats a token count with thousands separators (e.g. 18,801).
+func FormatTokens(n int) string {
+	s := strconv.Itoa(n)
+	var out []byte
+	for i := range s {
+		if i > 0 && (len(s)-i)%3 == 0 {
+			out = append(out, ',')
+		}
+		out = append(out, s[i])
+	}
+	return string(out)
+}
 
 const (
 	StatusHot        = "hot"
@@ -49,12 +107,20 @@ type Session struct {
 	mu        sync.Mutex
 	gen       int64 // incremented each Warm call; goroutines check before acting
 	forceNew  bool  // when true, next Warm starts fresh (--session-id) instead of --resume
+	stats     Stats // updated after each completed turn
 	callbacks Callbacks
 	cmd       *exec.Cmd
 	stdin     io.WriteCloser
 	stdout    *bufio.Reader
 	stderrBuf *bytes.Buffer // captures subprocess stderr; read after Wait()
 	msgCh     chan string
+}
+
+// GetStats returns a snapshot of the most recent turn stats.
+func (s *Session) GetStats() Stats {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.stats
 }
 
 // New creates a cold Session with the given parameters.
@@ -244,11 +310,35 @@ func (s *Session) coolIfGen(gen int64) {
 	s.Status = StatusCold
 }
 
-// streamEvent is the minimal shape we need from Claude's stream-json output.
+// streamEvent captures all event types emitted by Claude's stream-json output.
 type streamEvent struct {
-	Type    string `json:"type"`
-	Result  string `json:"result"`
-	IsError bool   `json:"is_error"`
+	Type string `json:"type"`
+
+	// result event fields.
+	Result       string  `json:"result"`
+	IsError      bool    `json:"is_error"`
+	DurationMS   int64   `json:"duration_ms"`
+	TotalCostUSD float64 `json:"total_cost_usd"`
+	Usage        struct {
+		InputTokens              int `json:"input_tokens"`
+		CacheCreationInputTokens int `json:"cache_creation_input_tokens"`
+		CacheReadInputTokens     int `json:"cache_read_input_tokens"`
+		OutputTokens             int `json:"output_tokens"`
+	} `json:"usage"`
+	// ModelUsage maps model name → per-model stats; we only need contextWindow.
+	ModelUsage map[string]struct {
+		ContextWindow int `json:"contextWindow"`
+	} `json:"modelUsage"`
+
+	// rate_limit_event fields.
+	RateLimitInfo *rateLimitInfo `json:"rate_limit_info"`
+}
+
+type rateLimitInfo struct {
+	Status         string `json:"status"`
+	ResetsAt       int64  `json:"resetsAt"`
+	RateLimitType  string `json:"rateLimitType"`
+	IsUsingOverage bool   `json:"isUsingOverage"`
 }
 
 // readLoop reads stdout line-by-line, parsing Claude's stream-json events.
@@ -289,18 +379,58 @@ func (s *Session) readLoop(gen int64) {
 			continue
 		}
 
-		if event.Type != "result" {
+		switch event.Type {
+		case "result":
+			if event.IsError {
+				slog.Warn("readLoop: result event is error", "session", s.Name, "result", event.Result)
+				continue
+			}
+			slog.Debug("readLoop: result event", "session", s.Name, "result_len", len(event.Result))
+			s.applyResultStats(event)
+			s.dispatchResult(event.Result)
+		case "rate_limit_event":
+			if event.RateLimitInfo != nil {
+				s.applyRateLimitStats(event.RateLimitInfo)
+			}
+		default:
 			slog.Debug("readLoop: skipping event", "session", s.Name, "type", event.Type)
-			continue
 		}
-		if event.IsError {
-			slog.Warn("readLoop: result event is error", "session", s.Name, "result", event.Result)
-			continue
-		}
-
-		slog.Debug("readLoop: result event", "session", s.Name, "result_len", len(event.Result))
-		s.dispatchResult(event.Result)
 	}
+}
+
+// applyResultStats updates session stats from a result event.
+func (s *Session) applyResultStats(e streamEvent) {
+	ctxWindow := 0
+	for _, m := range e.ModelUsage {
+		if m.ContextWindow > ctxWindow {
+			ctxWindow = m.ContextWindow
+		}
+	}
+	s.mu.Lock()
+	s.stats.InputTokens = e.Usage.InputTokens
+	s.stats.CacheReadTokens = e.Usage.CacheReadInputTokens
+	s.stats.CacheCreationTokens = e.Usage.CacheCreationInputTokens
+	s.stats.OutputTokens = e.Usage.OutputTokens
+	s.stats.TotalCostUSD = e.TotalCostUSD
+	s.stats.DurationMS = e.DurationMS
+	if ctxWindow > 0 {
+		s.stats.ContextWindow = ctxWindow
+	}
+	s.stats.UpdatedAt = time.Now()
+	s.mu.Unlock()
+}
+
+// applyRateLimitStats updates rate-limit fields from a rate_limit_event.
+func (s *Session) applyRateLimitStats(rl *rateLimitInfo) {
+	s.mu.Lock()
+	s.stats.RateLimitStatus = rl.Status
+	s.stats.RateLimitType = rl.RateLimitType
+	s.stats.IsUsingOverage = rl.IsUsingOverage
+	if rl.ResetsAt > 0 {
+		s.stats.RateLimitResetsAt = time.Unix(rl.ResetsAt, 0)
+	}
+	s.stats.UpdatedAt = time.Now()
+	s.mu.Unlock()
 }
 
 // dispatchResult scans the turn result text for directive lines (JSON starting

@@ -260,6 +260,23 @@ func (m *Manager) WarmIfCold(ctx context.Context, id string) error {
 	return nil
 }
 
+// ChannelStats returns the most recent turn stats for the session bound to
+// channelID. The second return value is false if no session is found or if no
+// turn has completed yet.
+func (m *Manager) ChannelStats(channelID string) (Stats, bool) {
+	m.mu.RLock()
+	sess := m.byChan[channelID]
+	m.mu.RUnlock()
+	if sess == nil {
+		return Stats{}, false
+	}
+	st := sess.GetStats()
+	if st.UpdatedAt.IsZero() {
+		return Stats{}, false
+	}
+	return st, true
+}
+
 // ByChannel returns the session whose Discord channel matches channelID, or nil.
 func (m *Manager) ByChannel(channelID string) *Session {
 	m.mu.RLock()

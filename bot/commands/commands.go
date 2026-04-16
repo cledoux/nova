@@ -15,6 +15,8 @@ import (
 	"github.com/bwmarrin/discordgo"
 )
 
+const statsBarWidth = 12
+
 type handler struct {
 	sessions *session.Manager
 	store    *db.Store
@@ -57,6 +59,7 @@ func novaCommand() *discordgo.ApplicationCommand {
 			{Type: sub, Name: "status", Description: "Show session status", Options: []*discordgo.ApplicationCommandOption{
 				opt("name", "Session name", str, true),
 			}},
+			{Type: sub, Name: "stats", Description: "Show context window, rate limit, and cost for this channel's session"},
 			{Type: sub, Name: "reset", Description: "Clear Claude context and re-orient from git history"},
 			{Type: sub, Name: "clean", Description: "Delete workspaces of terminated sessions"},
 			{Type: sub, Name: "restart", Description: "Restart the nova bot process (Docker restarts it automatically)"},
@@ -88,6 +91,8 @@ func (h *handler) onInteraction(s *discordgo.Session, i *discordgo.InteractionCr
 		h.handleResume(ctx, s, i, sub)
 	case "status":
 		h.handleStatus(s, i, sub)
+	case "stats":
+		h.handleStats(s, i)
 	case "reset":
 		h.handleReset(ctx, s, i)
 	case "clean":
@@ -220,13 +225,67 @@ func (h *handler) handleHelp(s *discordgo.Session, i *discordgo.InteractionCreat
 		"/nova list             List active sessions\n" +
 		"/nova kill <name>      Terminate a session\n" +
 		"/nova resume <name>    Force-warm a cold session\n" +
-		"/nova status <name>    Show session status\n" +
+		"/nova status <name>    Show session metadata\n" +
+		"/nova stats            Show context window, rate limits, and cost\n" +
 		"/nova clean            Delete workspaces of terminated sessions\n" +
 		"/nova reset            Clear Claude context and re-orient from git history\n" +
 		"/nova restart          Restart the nova bot process\n" +
 		"/nova help             Show this message\n" +
 		"```"
 	respondEphemeral(s, i, msg)
+}
+
+func (h *handler) handleStats(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	st, ok := h.sessions.ChannelStats(i.ChannelID)
+	if !ok {
+		respondEphemeral(s, i, "No stats yet — waiting for the first turn to complete in this channel.")
+		return
+	}
+
+	var sb strings.Builder
+
+	// Context window.
+	ctxPct := st.ContextUsedPct()
+	ctxBar := session.FormatBar(ctxPct, statsBarWidth)
+	fmt.Fprintf(&sb, "**Context** `%s` %d%% (%s / %s tokens)\n",
+		ctxBar, ctxPct,
+		session.FormatTokens(st.ContextTotalTokens()),
+		session.FormatTokens(st.ContextWindow))
+
+	// Rate limits.
+	if st.RateLimitType != "" {
+		label := st.RateLimitType
+		switch st.RateLimitStatus {
+		case "ok", "":
+			fmt.Fprintf(&sb, "**Rate limit** `%s` — OK\n", label)
+		default:
+			if !st.RateLimitResetsAt.IsZero() {
+				fmt.Fprintf(&sb, "**Rate limit** `%s` — %s (resets %s)\n",
+					label, st.RateLimitStatus,
+					st.RateLimitResetsAt.UTC().Format("Jan 2 15:04 UTC"))
+			} else {
+				fmt.Fprintf(&sb, "**Rate limit** `%s` — %s\n", label, st.RateLimitStatus)
+			}
+		}
+		if st.IsUsingOverage {
+			sb.WriteString("  _(overage allowed)_\n")
+		}
+	}
+
+	// Cost and duration of last turn.
+	dur := time.Duration(st.DurationMS) * time.Millisecond
+	fmt.Fprintf(&sb, "**Last turn** $%.4f  %s", st.TotalCostUSD, formatDuration(dur))
+
+	respondEphemeral(s, i, sb.String())
+}
+
+func formatDuration(d time.Duration) string {
+	if d < time.Minute {
+		return fmt.Sprintf("%.1fs", d.Seconds())
+	}
+	m := int(d.Minutes())
+	sec := int(d.Seconds()) % 60
+	return fmt.Sprintf("%dm%ds", m, sec)
 }
 
 // interactionUser returns a display name for the user who triggered i.
