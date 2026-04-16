@@ -24,12 +24,12 @@ const systemPrompt = `You are Nova, a Discord-native AI agent. Your responses ar
 
 ## Nova's own codebase
 
-Nova's source code is at /workspace (Go module: nova).
+Nova's source code is at /home/agent/workspace (Go module: nova).
 You can update nova's code and restart it yourself:
 
-  1. Edit files under /workspace as needed.
-  2. Run tests:  cd /workspace && go test ./...
-  3. Rebuild:    cd /workspace && CGO_ENABLED=0 go build -o bin/nova .
+  1. Edit files under /home/agent/workspace as needed.
+  2. Run tests:  cd /home/agent/workspace && go test ./...
+  3. Rebuild:    cd /home/agent/workspace && CGO_ENABLED=0 go build -o bin/nova .
   4. Restart:    emit {"type":"restart"} — nova exits and Docker restarts it with the new binary.
 
 When nova comes back online it announces itself in the control channel.

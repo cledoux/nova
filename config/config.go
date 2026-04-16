@@ -27,7 +27,7 @@ func Load(path string) (*Config, error) {
 	cfg := &Config{
 		ControlChannelName: "nova",
 		SessionRoot:        filepath.Join(home, ".nova", "sessions"),
-		RepoPath:           "/workspace",
+		RepoPath:           "/home/agent/workspace",
 		IdleTimeoutMinutes: 10,
 		ClaudeBin:          "claude",
 	}
