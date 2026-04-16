@@ -12,6 +12,8 @@ instead of edit history.
   messages should be about the specific change, not general process notes.
 - At the start of a session, use `git log` to reconstruct context before
   asking the user to re-explain history.
+- Bundle documentation updates (README, CLAUDE.md, etc.) in the same commit
+  as the code change they describe — not in a separate follow-up commit.
 
 ## Go
 
