@@ -6,41 +6,6 @@ import (
 	"nova/directive"
 )
 
-func TestParse_spawn(t *testing.T) {
-	d, err := directive.Parse(`{"type":"spawn","name":"worker-1","task":"implement auth"}`)
-	if err != nil {
-		t.Fatalf("Parse: %v", err)
-	}
-	if d == nil {
-		t.Fatal("expected directive, got nil")
-	}
-	if d.Type != directive.TypeSpawn {
-		t.Errorf("Type = %q, want %q", d.Type, directive.TypeSpawn)
-	}
-	if d.Name != "worker-1" {
-		t.Errorf("Name = %q, want worker-1", d.Name)
-	}
-	if d.Task != "implement auth" {
-		t.Errorf("Task = %q, want %q", d.Task, "implement auth")
-	}
-}
-
-func TestParse_send(t *testing.T) {
-	d, err := directive.Parse(`{"type":"send","to":"worker-1","message":"schema ready"}`)
-	if err != nil {
-		t.Fatalf("Parse: %v", err)
-	}
-	if d.Type != directive.TypeSend {
-		t.Errorf("Type = %q, want send", d.Type)
-	}
-	if d.To != "worker-1" {
-		t.Errorf("To = %q, want worker-1", d.To)
-	}
-	if d.Message != "schema ready" {
-		t.Errorf("Message = %q, want schema ready", d.Message)
-	}
-}
-
 func TestParse_done(t *testing.T) {
 	d, err := directive.Parse(`{"type":"done"}`)
 	if err != nil {
@@ -54,16 +19,16 @@ func TestParse_done(t *testing.T) {
 	}
 }
 
-func TestParse_createChannel(t *testing.T) {
-	d, err := directive.Parse(`{"type":"create_channel","name":"design-notes"}`)
+func TestParse_restart(t *testing.T) {
+	d, err := directive.Parse(`{"type":"restart"}`)
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}
-	if d.Type != directive.TypeCreateChannel {
-		t.Errorf("Type = %q, want create_channel", d.Type)
+	if d == nil {
+		t.Fatal("expected directive")
 	}
-	if d.Name != "design-notes" {
-		t.Errorf("Name = %q, want design-notes", d.Name)
+	if d.Type != directive.TypeRestart {
+		t.Errorf("Type = %q, want restart", d.Type)
 	}
 }
 
@@ -98,7 +63,7 @@ func TestParse_jsonWithoutType(t *testing.T) {
 }
 
 func TestParse_malformedJSON(t *testing.T) {
-	_, err := directive.Parse(`{"type":"spawn"`)
+	_, err := directive.Parse(`{"type":"restart"`)
 	if err == nil {
 		t.Error("expected error for malformed JSON")
 	}

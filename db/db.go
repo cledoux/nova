@@ -2,7 +2,6 @@ package db
 
 import (
 	"database/sql"
-	"errors"
 	"os"
 	"path/filepath"
 	"time"
@@ -17,19 +16,9 @@ type Session struct {
 	ClaudeSID  string
 	Workspace  string
 	ChannelID  string
-	SwarmID    string
 	Status     string
 	CreatedAt  time.Time
 	LastActive time.Time
-}
-
-// Swarm represents a persisted swarm record.
-type Swarm struct {
-	ID         string
-	Name       string
-	CategoryID string
-	OrchID     string
-	CreatedAt  time.Time
 }
 
 // Store wraps a SQLite database and provides all query methods.
@@ -67,17 +56,9 @@ func (s *Store) migrate() error {
 			claude_sid   TEXT NOT NULL DEFAULT '',
 			workspace    TEXT NOT NULL,
 			channel_id   TEXT NOT NULL,
-			swarm_id     TEXT NOT NULL DEFAULT '',
 			status       TEXT NOT NULL DEFAULT 'cold',
 			created_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			last_active  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-		);
-		CREATE TABLE IF NOT EXISTS swarms (
-			id           TEXT PRIMARY KEY,
-			name         TEXT NOT NULL UNIQUE,
-			category_id  TEXT NOT NULL,
-			orch_id      TEXT NOT NULL DEFAULT '',
-			created_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 		);
 		CREATE TABLE IF NOT EXISTS messages (
 			id           INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -93,9 +74,9 @@ func (s *Store) migrate() error {
 // CreateSession inserts a new session record.
 func (s *Store) CreateSession(sess Session) error {
 	_, err := s.db.Exec(
-		`INSERT INTO sessions (id, name, claude_sid, workspace, channel_id, swarm_id, status)
-		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		sess.ID, sess.Name, sess.ClaudeSID, sess.Workspace, sess.ChannelID, sess.SwarmID, sess.Status,
+		`INSERT INTO sessions (id, name, claude_sid, workspace, channel_id, status)
+		 VALUES (?, ?, ?, ?, ?, ?)`,
+		sess.ID, sess.Name, sess.ClaudeSID, sess.Workspace, sess.ChannelID, sess.Status,
 	)
 	return err
 }
@@ -103,7 +84,7 @@ func (s *Store) CreateSession(sess Session) error {
 // GetSession returns the session with the given ID, or an error if not found.
 func (s *Store) GetSession(id string) (Session, error) {
 	return s.scanSession(s.db.QueryRow(
-		`SELECT id, name, claude_sid, workspace, channel_id, swarm_id, status, created_at, last_active
+		`SELECT id, name, claude_sid, workspace, channel_id, status, created_at, last_active
 		 FROM sessions WHERE id = ?`, id,
 	))
 }
@@ -111,26 +92,17 @@ func (s *Store) GetSession(id string) (Session, error) {
 // GetSessionByName returns the session with the given name.
 func (s *Store) GetSessionByName(name string) (Session, error) {
 	return s.scanSession(s.db.QueryRow(
-		`SELECT id, name, claude_sid, workspace, channel_id, swarm_id, status, created_at, last_active
+		`SELECT id, name, claude_sid, workspace, channel_id, status, created_at, last_active
 		 FROM sessions WHERE name = ?`, name,
 	))
 }
 
-// ListSessions returns all sessions. If swarmID is non-empty, filters to that swarm.
-func (s *Store) ListSessions(swarmID string) ([]Session, error) {
-	var rows *sql.Rows
-	var err error
-	if swarmID == "" {
-		rows, err = s.db.Query(
-			`SELECT id, name, claude_sid, workspace, channel_id, swarm_id, status, created_at, last_active
-			 FROM sessions WHERE status != 'terminated' ORDER BY created_at`,
-		)
-	} else {
-		rows, err = s.db.Query(
-			`SELECT id, name, claude_sid, workspace, channel_id, swarm_id, status, created_at, last_active
-			 FROM sessions WHERE swarm_id = ? AND status != 'terminated' ORDER BY created_at`, swarmID,
-		)
-	}
+// ListSessions returns all non-terminated sessions.
+func (s *Store) ListSessions() ([]Session, error) {
+	rows, err := s.db.Query(
+		`SELECT id, name, claude_sid, workspace, channel_id, status, created_at, last_active
+		 FROM sessions WHERE status != 'terminated' ORDER BY created_at`,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -149,7 +121,7 @@ func (s *Store) ListSessions(swarmID string) ([]Session, error) {
 // ListTerminatedSessions returns sessions with status 'terminated'.
 func (s *Store) ListTerminatedSessions() ([]Session, error) {
 	rows, err := s.db.Query(
-		`SELECT id, name, claude_sid, workspace, channel_id, swarm_id, status, created_at, last_active
+		`SELECT id, name, claude_sid, workspace, channel_id, status, created_at, last_active
 		 FROM sessions WHERE status = 'terminated'`,
 	)
 	if err != nil {
@@ -191,60 +163,6 @@ func (s *Store) ResetActiveSessions() error {
 	return err
 }
 
-// CreateSwarm inserts a new swarm record.
-func (s *Store) CreateSwarm(sw Swarm) error {
-	_, err := s.db.Exec(
-		`INSERT INTO swarms (id, name, category_id, orch_id) VALUES (?, ?, ?, ?)`,
-		sw.ID, sw.Name, sw.CategoryID, sw.OrchID,
-	)
-	return err
-}
-
-// GetSwarm returns the swarm with the given ID.
-func (s *Store) GetSwarm(id string) (Swarm, error) {
-	return s.scanSwarm(s.db.QueryRow(
-		`SELECT id, name, category_id, orch_id, created_at FROM swarms WHERE id = ?`, id,
-	))
-}
-
-// GetSwarmByName returns the swarm with the given name.
-func (s *Store) GetSwarmByName(name string) (Swarm, error) {
-	return s.scanSwarm(s.db.QueryRow(
-		`SELECT id, name, category_id, orch_id, created_at FROM swarms WHERE name = ?`, name,
-	))
-}
-
-// ListSwarms returns all swarms.
-func (s *Store) ListSwarms() ([]Swarm, error) {
-	rows, err := s.db.Query(`SELECT id, name, category_id, orch_id, created_at FROM swarms ORDER BY created_at`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var out []Swarm
-	for rows.Next() {
-		sw, err := s.scanSwarm(rows)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, sw)
-	}
-	return out, rows.Err()
-}
-
-// DeleteSwarm removes the swarm record with the given ID.
-func (s *Store) DeleteSwarm(id string) error {
-	res, err := s.db.Exec(`DELETE FROM swarms WHERE id = ?`, id)
-	if err != nil {
-		return err
-	}
-	n, _ := res.RowsAffected()
-	if n == 0 {
-		return errors.New("swarm not found")
-	}
-	return nil
-}
-
 // InsertMessage records a message for a session.
 func (s *Store) InsertMessage(sessionID, role, content string) error {
 	_, err := s.db.Exec(
@@ -269,14 +187,8 @@ func (s *Store) scanSession(row scanner) (Session, error) {
 	var sess Session
 	err := row.Scan(
 		&sess.ID, &sess.Name, &sess.ClaudeSID, &sess.Workspace,
-		&sess.ChannelID, &sess.SwarmID, &sess.Status,
+		&sess.ChannelID, &sess.Status,
 		&sess.CreatedAt, &sess.LastActive,
 	)
 	return sess, err
-}
-
-func (s *Store) scanSwarm(row scanner) (Swarm, error) {
-	var sw Swarm
-	err := row.Scan(&sw.ID, &sw.Name, &sw.CategoryID, &sw.OrchID, &sw.CreatedAt)
-	return sw, err
 }

@@ -20,12 +20,10 @@ import (
 
 // SpawnOpts carries options for creating a new session.
 type SpawnOpts struct {
-	Name       string // auto-generated if empty
-	SwarmID    string
-	Task       string // injected as the first message if non-empty
-	CategoryID string // Discord category; uses soloCategoryID if empty
-	ChannelID  string // attach to existing channel instead of creating one
-	Workspace  string // override session workspace directory; defaults to SessionRoot/<id>
+	Name      string // auto-generated if empty
+	Task      string // injected as the first message if non-empty
+	ChannelID string // attach to existing channel instead of creating one
+	Workspace string // override session workspace directory; defaults to SessionRoot/<id>
 }
 
 // Manager owns all active sessions and handles their lifecycle.
@@ -35,30 +33,25 @@ type Manager struct {
 	byName   map[string]*Session
 	byChan   map[string]*Session // channelID → session
 
-	store             *db.Store
-	discord           discordhelper.Client
-	cfg               *config.Config
-	soloCategoryID    string
-	archiveCategoryID string
+	store   *db.Store
+	discord discordhelper.Client
+	cfg     *config.Config
 
 	// RestartFn is called when a restart directive is received. Defaults to
 	// os.Exit(0) so Docker / the process supervisor restarts the binary.
 	RestartFn func()
 }
 
-// NewManager creates a Manager. soloCategoryID and archiveCategoryID are the
-// Discord category IDs for solo sessions and archived sessions respectively.
-func NewManager(store *db.Store, discord discordhelper.Client, cfg *config.Config, soloCategoryID, archiveCategoryID string) *Manager {
+// NewManager creates a Manager.
+func NewManager(store *db.Store, discord discordhelper.Client, cfg *config.Config) *Manager {
 	return &Manager{
-		sessions:          make(map[string]*Session),
-		byName:            make(map[string]*Session),
-		byChan:            make(map[string]*Session),
-		store:             store,
-		discord:           discord,
-		cfg:               cfg,
-		soloCategoryID:    soloCategoryID,
-		archiveCategoryID: archiveCategoryID,
-		RestartFn:         func() { os.Exit(0) },
+		sessions:  make(map[string]*Session),
+		byName:    make(map[string]*Session),
+		byChan:    make(map[string]*Session),
+		store:     store,
+		discord:   discord,
+		cfg:       cfg,
+		RestartFn: func() { os.Exit(0) },
 	}
 }
 
@@ -82,7 +75,7 @@ func (m *Manager) SpawnOrRevive(ctx context.Context, opts SpawnOpts) (*Session, 
 
 // revive loads a DB session record into memory and warms it as a resume.
 func (m *Manager) revive(ctx context.Context, dbSess db.Session) error {
-	sess := New(dbSess.ID, dbSess.Name, dbSess.Workspace, dbSess.ChannelID, dbSess.SwarmID)
+	sess := New(dbSess.ID, dbSess.Name, dbSess.Workspace, dbSess.ChannelID)
 	sess.ClaudeSID = dbSess.ClaudeSID
 	// gen=1 so that Warm uses --resume: the Claude session already exists on disk.
 	sess.gen = 1
@@ -111,7 +104,7 @@ func (m *Manager) Spawn(ctx context.Context, opts SpawnOpts) (*Session, error) {
 		name = generateName()
 	}
 
-	slog.Info("spawning session", "name", name, "swarm_id", opts.SwarmID)
+	slog.Info("spawning session", "name", name)
 
 	workspace := opts.Workspace
 	if workspace == "" {
@@ -123,13 +116,9 @@ func (m *Manager) Spawn(ctx context.Context, opts SpawnOpts) (*Session, error) {
 
 	channelID := opts.ChannelID
 	if channelID == "" {
-		catID := opts.CategoryID
-		if catID == "" {
-			catID = m.soloCategoryID
-		}
-		slog.Debug("creating Discord channel", "session", name, "category_id", catID)
+		slog.Debug("creating Discord channel", "session", name)
 		var err error
-		channelID, err = discordhelper.CreateChannel(m.discord, m.cfg.GuildID, catID, name)
+		channelID, err = discordhelper.CreateChannel(m.discord, m.cfg.GuildID, "", name)
 		if err != nil {
 			return nil, fmt.Errorf("create channel: %w", err)
 		}
@@ -143,14 +132,13 @@ func (m *Manager) Spawn(ctx context.Context, opts SpawnOpts) (*Session, error) {
 		ClaudeSID: claudeSID,
 		Workspace: workspace,
 		ChannelID: channelID,
-		SwarmID:   opts.SwarmID,
 		Status:    StatusCold,
 	}
 	if err := m.store.CreateSession(dbSess); err != nil {
 		return nil, fmt.Errorf("create session record: %w", err)
 	}
 
-	sess := New(id, name, workspace, channelID, opts.SwarmID)
+	sess := New(id, name, workspace, channelID)
 	sess.ClaudeSID = claudeSID
 
 	m.mu.Lock()
@@ -179,7 +167,7 @@ func (m *Manager) Spawn(ctx context.Context, opts SpawnOpts) (*Session, error) {
 	return sess, nil
 }
 
-// Kill terminates a session by name and archives its Discord channel.
+// Kill terminates a session by name.
 func (m *Manager) Kill(name string) error {
 	m.mu.RLock()
 	sess := m.byName[name]
@@ -192,11 +180,6 @@ func (m *Manager) Kill(name string) error {
 	sess.Terminate()
 
 	if err := m.store.UpdateSessionStatus(sess.ID, StatusTerminated); err != nil {
-		return err
-	}
-
-	slog.Debug("archiving Discord channel", "session", name, "channel_id", sess.ChannelID)
-	if err := discordhelper.ArchiveChannel(m.discord, m.cfg.GuildID, sess.ChannelID, m.archiveCategoryID); err != nil {
 		return err
 	}
 	slog.Info("session terminated", "session", name)
@@ -255,19 +238,15 @@ func (m *Manager) ByName(name string) *Session {
 	return m.byName[name]
 }
 
-// List returns all active sessions, optionally filtered by swarm ID.
-func (m *Manager) List(swarmID string) []*Session {
+// List returns all active sessions.
+func (m *Manager) List() []*Session {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	var out []*Session
 	for _, s := range m.sessions {
-		if s.Status == StatusTerminated {
-			continue
+		if s.Status != StatusTerminated {
+			out = append(out, s)
 		}
-		if swarmID != "" && s.SwarmID != swarmID {
-			continue
-		}
-		out = append(out, s)
 	}
 	return out
 }
@@ -282,7 +261,7 @@ func (m *Manager) makeCallbacks(ctx context.Context) Callbacks {
 		},
 		OnDirective: func(sess *Session, d directive.Directive) {
 			slog.Info("handling directive", "session", sess.Name, "type", d.Type)
-			m.handleDirective(ctx, sess, d)
+			m.handleDirective(sess, d)
 		},
 		OnIdle: func(sessID string) {
 			m.mu.RLock()
@@ -298,49 +277,8 @@ func (m *Manager) makeCallbacks(ctx context.Context) Callbacks {
 	}
 }
 
-func (m *Manager) handleDirective(ctx context.Context, src *Session, d directive.Directive) {
+func (m *Manager) handleDirective(src *Session, d directive.Directive) {
 	switch d.Type {
-	case directive.TypeSpawn:
-		catID := m.soloCategoryID
-		if src.SwarmID != "" {
-			if sw, err := m.store.GetSwarm(src.SwarmID); err == nil {
-				catID = sw.CategoryID
-			}
-		}
-		slog.Info("directive: spawning session", "from", src.Name, "name", d.Name, "swarm_id", src.SwarmID)
-		if _, err := m.Spawn(ctx, SpawnOpts{
-			Name:       d.Name,
-			SwarmID:    src.SwarmID,
-			Task:       d.Task,
-			CategoryID: catID,
-		}); err != nil {
-			slog.Error("directive spawn failed", "from", src.Name, "name", d.Name, "err", err)
-		}
-
-	case directive.TypeSend:
-		m.mu.RLock()
-		target := m.byName[d.To]
-		m.mu.RUnlock()
-		if target == nil {
-			slog.Error("directive send: target session not found", "from", src.Name, "to", d.To)
-			return
-		}
-		slog.Info("directive: sending message to session", "from", src.Name, "to", d.To, "message_len", len(d.Message))
-		_ = m.WarmIfCold(ctx, target.ID)
-		_ = target.Send(d.Message)
-
-	case directive.TypeCreateChannel:
-		catID := m.soloCategoryID
-		if src.SwarmID != "" {
-			if sw, err := m.store.GetSwarm(src.SwarmID); err == nil {
-				catID = sw.CategoryID
-			}
-		}
-		slog.Info("directive: creating channel", "from", src.Name, "channel_name", d.Name)
-		if _, err := discordhelper.CreateChannel(m.discord, m.cfg.GuildID, catID, d.Name); err != nil {
-			slog.Error("directive create_channel failed", "from", src.Name, "name", d.Name, "err", err)
-		}
-
 	case directive.TypeRestart:
 		slog.Info("directive: restart requested", "from", src.Name)
 		_ = discordhelper.PostMessage(m.discord, src.ChannelID, "Restarting nova... brb")

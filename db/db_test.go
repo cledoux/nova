@@ -82,36 +82,10 @@ func TestResetActiveSessions(t *testing.T) {
 func TestListSessions(t *testing.T) {
 	store := newTestStore(t)
 	_ = store.CreateSession(db.Session{ID: "x", Name: "x", Workspace: "/w", ChannelID: "c1", Status: "cold"})
-	_ = store.CreateSession(db.Session{ID: "y", Name: "y", Workspace: "/w", ChannelID: "c2", Status: "cold", SwarmID: "sw1"})
-	all, err := store.ListSessions("")
+	_ = store.CreateSession(db.Session{ID: "y", Name: "y", Workspace: "/w", ChannelID: "c2", Status: "cold"})
+	all, err := store.ListSessions()
 	if err != nil || len(all) != 2 {
-		t.Errorf("ListSessions all: got %d, want 2 (err=%v)", len(all), err)
-	}
-	bySwarm, err := store.ListSessions("sw1")
-	if err != nil || len(bySwarm) != 1 {
-		t.Errorf("ListSessions by swarm: got %d, want 1 (err=%v)", len(bySwarm), err)
-	}
-}
-
-func TestSwarmCRUD(t *testing.T) {
-	store := newTestStore(t)
-	sw := db.Swarm{ID: "sw-1", Name: "backend", CategoryID: "cat-1"}
-	if err := store.CreateSwarm(sw); err != nil {
-		t.Fatalf("CreateSwarm: %v", err)
-	}
-	got, err := store.GetSwarmByName("backend")
-	if err != nil {
-		t.Fatalf("GetSwarmByName: %v", err)
-	}
-	if got.CategoryID != "cat-1" {
-		t.Errorf("CategoryID = %q, want cat-1", got.CategoryID)
-	}
-	if err := store.DeleteSwarm("sw-1"); err != nil {
-		t.Fatalf("DeleteSwarm: %v", err)
-	}
-	_, err = store.GetSwarm("sw-1")
-	if err == nil {
-		t.Error("expected error after delete")
+		t.Errorf("ListSessions: got %d, want 2 (err=%v)", len(all), err)
 	}
 }
 

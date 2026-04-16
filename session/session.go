@@ -41,7 +41,6 @@ type Session struct {
 	ClaudeSID string
 	Workspace string
 	ChannelID string
-	SwarmID   string
 	Status    string
 
 	mu        sync.Mutex
@@ -55,13 +54,12 @@ type Session struct {
 }
 
 // New creates a cold Session with the given parameters.
-func New(id, name, workspace, channelID, swarmID string) *Session {
+func New(id, name, workspace, channelID string) *Session {
 	return &Session{
 		ID:        id,
 		Name:      name,
 		Workspace: workspace,
 		ChannelID: channelID,
-		SwarmID:   swarmID,
 		Status:    StatusCold,
 	}
 }

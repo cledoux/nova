@@ -34,7 +34,7 @@ func TestSession_WarmAndSend(t *testing.T) {
 	bin := fakeClaude(t)
 	contentCh := make(chan string, 1)
 
-	s := session.New("id-1", "worker", t.TempDir(), "ch-1", "")
+	s := session.New("id-1", "worker", t.TempDir(), "ch-1")
 	err := s.Warm(context.Background(), bin, "", 30*time.Second, session.Callbacks{
 		OnContent:   func(_, content string) { contentCh <- content },
 		OnDirective: func(_ *session.Session, _ directive.Directive) {},
@@ -65,7 +65,7 @@ func TestSession_DirectiveIntercepted(t *testing.T) {
 	// should be intercepted and NOT appear in content.
 	script := "#!/bin/sh\n" +
 		"printf '{\"type\":\"result\",\"subtype\":\"success\"," +
-		"\"result\":\"{\\\\\"type\\\\\":\\\\\"spawn\\\\\",\\\\\"name\\\\\":\\\\\"w\\\\\",\\\\\"task\\\\\":\\\\\"t\\\\\"}\",\"is_error\":false}\\n'\n" +
+		"\"result\":\"{\\\\\"type\\\\\":\\\\\"restart\\\\\"}\",\"is_error\":false}\\n'\n" +
 		"cat\n"
 	path := filepath.Join(t.TempDir(), "fakeclaude")
 	if err := os.WriteFile(path, []byte(script), 0755); err != nil {
@@ -75,7 +75,7 @@ func TestSession_DirectiveIntercepted(t *testing.T) {
 	contentCh := make(chan string, 1)
 	dirCh := make(chan directive.Directive, 1)
 
-	s := session.New("id-2", "orch", t.TempDir(), "ch-2", "")
+	s := session.New("id-2", "orch", t.TempDir(), "ch-2")
 	_ = s.Warm(context.Background(), path, "", 30*time.Second, session.Callbacks{
 		OnContent:   func(_, content string) { contentCh <- content },
 		OnDirective: func(_ *session.Session, d directive.Directive) { dirCh <- d },
@@ -85,8 +85,8 @@ func TestSession_DirectiveIntercepted(t *testing.T) {
 	// Wait for directive
 	select {
 	case d := <-dirCh:
-		if d.Type != directive.TypeSpawn {
-			t.Errorf("directive type = %q, want spawn", d.Type)
+		if d.Type != directive.TypeRestart {
+			t.Errorf("directive type = %q, want restart", d.Type)
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("timeout waiting for directive")
@@ -107,7 +107,7 @@ func TestSession_IdleTimer(t *testing.T) {
 	bin := fakeClaude(t)
 	idleCh := make(chan string, 1)
 
-	s := session.New("id-3", "idle-test", t.TempDir(), "ch-3", "")
+	s := session.New("id-3", "idle-test", t.TempDir(), "ch-3")
 	_ = s.Warm(context.Background(), bin, "", 100*time.Millisecond, session.Callbacks{
 		OnContent:   func(_, _ string) {},
 		OnDirective: func(_ *session.Session, _ directive.Directive) {},
@@ -130,7 +130,7 @@ func TestSession_IdleTimer(t *testing.T) {
 
 func TestSession_Terminate(t *testing.T) {
 	bin := fakeClaude(t)
-	s := session.New("id-4", "term", t.TempDir(), "ch-4", "")
+	s := session.New("id-4", "term", t.TempDir(), "ch-4")
 	_ = s.Warm(context.Background(), bin, "", 30*time.Second, session.Callbacks{
 		OnContent:   func(_, _ string) {},
 		OnDirective: func(_ *session.Session, _ directive.Directive) {},

@@ -72,7 +72,7 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	if _, _, err := nova.Run(ctx, dg, store, cfg); err != nil {
+	if _, err := nova.Run(ctx, dg, store, cfg); err != nil {
 		log.Fatalf("nova run: %v", err)
 	}
 

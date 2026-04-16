@@ -4,7 +4,6 @@ package bot
 import (
 	"context"
 	"fmt"
-	"log"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -15,7 +14,6 @@ import (
 	"nova/db"
 	discordhelper "nova/discord"
 	"nova/session"
-	"nova/swarm"
 
 	"github.com/bwmarrin/discordgo"
 )
@@ -34,15 +32,12 @@ You can update nova's code and restart it yourself:
 
 When nova comes back online it announces itself in the control channel.
 
-## Swarm directives
+## Directives
 
 To issue directives, emit one JSON object per line with a "type" field.
 Directives are intercepted by the bot and not posted to Discord.
 
 Available directive types:
-  {"type":"spawn","name":"<name>","task":"<initial message>"}
-  {"type":"send","to":"<name>","message":"<msg>"}
-  {"type":"create_channel","name":"<name>"}
   {"type":"restart"}
 
 All other output is posted to your Discord channel verbatim.`
@@ -55,12 +50,12 @@ func Intents() discordgo.Intent {
 }
 
 // Run performs the startup sequence that requires an open Discord connection.
-// Returns initialized managers for use by main.
-func Run(ctx context.Context, dg *discordgo.Session, store *db.Store, cfg *config.Config) (*session.Manager, *swarm.Manager, error) {
+// Returns the initialized session manager for use by main.
+func Run(ctx context.Context, dg *discordgo.Session, store *db.Store, cfg *config.Config) (*session.Manager, error) {
 	// 1. Write system prompt file.
 	slog.Debug("writing system prompt file")
 	if err := writeSystemPrompt(); err != nil {
-		return nil, nil, fmt.Errorf("write system prompt: %w", err)
+		return nil, fmt.Errorf("write system prompt: %w", err)
 	}
 
 	guildID := cfg.GuildID
@@ -69,52 +64,39 @@ func Run(ctx context.Context, dg *discordgo.Session, store *db.Store, cfg *confi
 	slog.Debug("ensuring control channel", "name", cfg.ControlChannelName)
 	controlChannelID, err := discordhelper.EnsureChannel(dg, guildID, "", cfg.ControlChannelName)
 	if err != nil {
-		return nil, nil, fmt.Errorf("ensure control channel: %w", err)
+		return nil, fmt.Errorf("ensure control channel: %w", err)
 	}
 
-	// 3. Ensure fixed categories.
-	slog.Debug("ensuring Discord categories")
-	soloCatID, err := discordhelper.EnsureCategory(dg, guildID, "Nova: solo")
-	if err != nil {
-		return nil, nil, fmt.Errorf("ensure solo category: %w", err)
-	}
-	archiveCatID, err := discordhelper.EnsureCategory(dg, guildID, "Nova: archived")
-	if err != nil {
-		return nil, nil, fmt.Errorf("ensure archive category: %w", err)
-	}
-	slog.Debug("Discord categories ready", "solo_cat", soloCatID, "archive_cat", archiveCatID)
+	// 3. Build manager.
+	sessionMgr := session.NewManager(store, dg, cfg)
 
-	// 4. Build managers.
-	sessionMgr := session.NewManager(store, dg, cfg, soloCatID, archiveCatID)
-	swarmMgr := swarm.NewManager(store, dg, sessionMgr, guildID)
-
-	// 5. Spawn (or revive on restart) the control session.
+	// 4. Spawn (or revive on restart) the control session.
 	slog.Info("ensuring control session", "name", cfg.ControlChannelName, "channel_id", controlChannelID)
 	if _, err := sessionMgr.SpawnOrRevive(ctx, session.SpawnOpts{
 		Name:      cfg.ControlChannelName,
 		ChannelID: controlChannelID,
 		Workspace: cfg.RepoPath,
 	}); err != nil {
-		return nil, nil, fmt.Errorf("spawn control session: %w", err)
+		return nil, fmt.Errorf("spawn control session: %w", err)
 	}
 
-	// 6. Register message router.
+	// 5. Register message router.
 	RegisterMessageRouter(dg, sessionMgr, cfg)
 
-	// 7. Register slash commands.
+	// 6. Register slash commands.
 	slog.Debug("registering slash commands")
-	commands.Register(dg, sessionMgr, swarmMgr, store, guildID)
+	commands.Register(dg, sessionMgr, store, guildID)
 	if err := commands.RegisterCommands(dg, guildID); err != nil {
-		return nil, nil, fmt.Errorf("register commands: %w", err)
+		return nil, fmt.Errorf("register commands: %w", err)
 	}
 
-	// 8. Announce that nova is online (serves as restart-success confirmation).
+	// 7. Announce that nova is online (serves as restart-success confirmation).
 	slog.Info("nova startup complete", "guild_id", guildID)
 	if err := discordhelper.PostMessage(dg, controlChannelID, "Nova is online."); err != nil {
 		slog.Warn("failed to post startup announcement", "err", err)
 	}
 
-	return sessionMgr, swarmMgr, nil
+	return sessionMgr, nil
 }
 
 // RegisterMessageRouter installs the handler that routes Discord messages to
@@ -158,7 +140,7 @@ func RegisterMessageRouter(dg *discordgo.Session, mgr *session.Manager, cfg *con
 		if sess.Status == session.StatusCold {
 			slog.Info("warming cold session for incoming message", "session", sess.Name, "author", m.Author.Username)
 			if err := mgr.WarmIfCold(ctx, sess.ID); err != nil {
-				log.Printf("WarmIfCold %s: %v", sess.Name, err)
+				slog.Error("WarmIfCold failed", "session", sess.Name, "err", err)
 				return
 			}
 		}
@@ -168,7 +150,7 @@ func RegisterMessageRouter(dg *discordgo.Session, mgr *session.Manager, cfg *con
 			"content_len", len(m.Content),
 		)
 		if err := sess.Send(m.Content); err != nil {
-			log.Printf("Send to %s: %v", sess.Name, err)
+			slog.Error("Send failed", "session", sess.Name, "err", err)
 		}
 	})
 }

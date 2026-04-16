@@ -26,7 +26,7 @@ func newTestManager(t *testing.T) (*session.Manager, *db.Store, *testdiscord.Ses
 		IdleTimeoutMinutes: 1,
 		ClaudeBin:          fakeClaude(t),
 	}
-	mgr := session.NewManager(store, fake, cfg, "cat-solo", "cat-archive")
+	mgr := session.NewManager(store, fake, cfg)
 	return mgr, store, fake
 }
 

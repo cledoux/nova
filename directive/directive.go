@@ -10,20 +10,13 @@ import (
 type Type string
 
 const (
-	TypeSpawn         Type = "spawn"
-	TypeSend          Type = "send"
-	TypeCreateChannel Type = "create_channel"
-	TypeDone          Type = "done"
-	TypeRestart       Type = "restart"
+	TypeDone    Type = "done"
+	TypeRestart Type = "restart"
 )
 
-// Directive is a parsed swarm control instruction from a Claude agent.
+// Directive is a parsed control instruction from a Claude agent.
 type Directive struct {
-	Type    Type   `json:"type"`
-	Name    string `json:"name,omitempty"`    // spawn: session name; create_channel: channel name
-	Task    string `json:"task,omitempty"`    // spawn: initial message to inject
-	To      string `json:"to,omitempty"`      // send: target session name
-	Message string `json:"message,omitempty"` // send: message content
+	Type Type `json:"type"`
 }
 
 // Parse tries to parse line as a Directive. Returns nil, nil if line does not
