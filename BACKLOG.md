@@ -6,20 +6,28 @@ _(nothing — see Pending for next items)_
 
 ## Pending
 
-- FEATURE: **Live thinking stream**. Surface Claude's extended thinking
-  in Discord as it happens — not just the final response. Options: stream
-  thinking text into an ephemeral or thread message that updates in real
-  time, or post thinking blocks as a collapsible thread reply before the
-  final answer. Requires enabling extended thinking in the Claude session
-  and plumbing the thinking deltas through the stream parser.
-
-- FEATURE: **Status line via Discord**. Expose Claude's status line
-  information (tool use, thinking state, etc.) to Discord users.
-  Consider a `/status` slash command or a persistent status embed that
-  updates in real time.
+_(nothing — see Done for completed items)_
 
 
 ## Done
+
+- FEATURE: **Thinking thread**. When Claude produces thinking blocks
+  (extended thinking), they are posted as a Discord thread reply on the
+  answer message. The `assistant` stream-json event is parsed for
+  `type:"thinking"` content blocks; blocks are accumulated during the
+  turn and passed to `OnContent`, which spawns a goroutine to create the
+  thread via `discord.PostThread` after the answer is posted.
+
+- FEATURE: **`/nova stats`**. Shows context window usage, rate limit
+  status, and last-turn cost for the session in the current channel.
+  Data comes from `rate_limit_event` and `result` stream-json events
+  (not the statusline, which doesn't fire in pipe mode). Context window %
+  is computed from token counts vs. the model's `contextWindow` field.
+
+- FEATURE: **Resume-check prompt on restart**. When Nova restarts and
+  revives a session, it now sends a prompt asking Claude to check git
+  log/status for interrupted work and resume if needed, rather than
+  coming back online silently.
 
 - FEATURE: **Acknowledgement indicator**. Implemented via Discord's native
   typing indicator (`ChannelTyping`). Fires when a message hits the write
