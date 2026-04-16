@@ -398,27 +398,28 @@ func (m *Manager) handleDirective(src *Session, d directive.Directive) {
 }
 
 // bootPrompt returns the orientation message sent to Claude on fresh spawn or
-// after a /reset. Claude is instructed to reply with {"type":"done"} so
-// nothing gets posted to Discord.
+// after a /reset. Claude reads the git log and posts a brief status to Discord.
 func (m *Manager) bootPrompt() string {
 	return fmt.Sprintf(
 		"You are starting fresh. Read the git log in %s to orient yourself — "+
 			"understand what the project does and what changed recently. "+
-			`Reply only with {"type":"done"}; do not post any other output.`,
+			"Post a short message to Discord summarising what you found: "+
+			"what the project does, and what the most recent work was.",
 		m.cfg.RepoPath,
 	)
 }
 
 // resumePrompt returns the message sent after a session is revived following a
-// restart. It asks Claude to check for unfinished work and pick up if needed,
-// or stay silent with {"type":"done"} if there is nothing to resume.
+// restart. It asks Claude to check for unfinished work and always post a
+// brief status update so the user knows orientation is complete.
 func (m *Manager) resumePrompt() string {
 	return fmt.Sprintf(
 		"Nova has just restarted and your session has been revived. "+
 			"Check `git log` and `git status` in %s to see if there is any work in progress "+
 			"that was interrupted by the restart. "+
-			"If you were in the middle of something, pick up where you left off and let the user know. "+
-			`If everything looks complete and there is nothing to resume, reply only with {"type":"done"} and do not post anything.`,
+			"Then post a short message to Discord: if you were in the middle of something, "+
+			"say what it was and pick up where you left off; "+
+			"otherwise give a one-line confirmation that everything looks complete.",
 		m.cfg.RepoPath,
 	)
 }
