@@ -1,0 +1,7 @@
+# Ignore all generated Claude state — only versioned config files are tracked.
+*
+!.gitignore
+!CLAUDE.md
+!settings.json
+!statusline-command.sh
+!test_statusline.sh

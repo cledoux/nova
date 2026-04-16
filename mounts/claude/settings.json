@@ -1,0 +1,21 @@
+{
+  "env": {
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+  },
+  "permissions": {
+    "allow": [
+      "Bash(*)",
+      "Edit(*)",
+      "Write(*)",
+      "WebSearch"
+    ]
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "bash /home/agent/.claude/statusline-command.sh"
+  },
+  "enabledPlugins": {
+    "superpowers@claude-plugins-official": true
+  },
+  "skipDangerousModePermissionPrompt": true
+}
