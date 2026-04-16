@@ -37,10 +37,13 @@ logs:
 shell:
 	docker compose exec nova /bin/bash
 
+# -c continues the most recent session; falls back to a new session if none
+# exists (e.g. after a clean rebuild). The claude CLI has no built-in
+# "continue or new" flag, so we emulate it with shell fallback.
 alias cc := claude
 alias cld := claude
 claude:
-	docker compose exec nova claude --dangerously-skip-permissions -c
+	docker compose exec nova bash -c 'claude --dangerously-skip-permissions -c || claude --dangerously-skip-permissions'
 
 # Stage files into build/ for inclusion in the Docker image (re-runnable)
 prepare-build-image:
