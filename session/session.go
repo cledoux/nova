@@ -19,6 +19,37 @@ import (
 	"nova/directive"
 )
 
+// RateLimitWindow holds rate limit data for a single window type (e.g. "five_hour").
+type RateLimitWindow struct {
+	Status    string    // "ok", "rejected"
+	ResetsAt  time.Time // zero if not yet received
+	IsOverage bool
+}
+
+// rateLimitDurations maps rate limit type names to their window durations.
+var rateLimitDurations = map[string]time.Duration{
+	"five_hour": 5 * time.Hour,
+	"seven_day": 7 * 24 * time.Hour,
+}
+
+// UsedPct returns the estimated percentage of this window that has been consumed,
+// derived from ResetsAt and the known window duration.
+// Returns (0, false) if data is unavailable or the window type is unrecognised.
+func (w RateLimitWindow) UsedPct(windowType string) (int, bool) {
+	dur, ok := rateLimitDurations[windowType]
+	if !ok || w.ResetsAt.IsZero() {
+		return 0, false
+	}
+	remaining := time.Until(w.ResetsAt)
+	if remaining <= 0 {
+		return 0, true
+	}
+	if remaining > dur {
+		remaining = dur
+	}
+	return int((dur - remaining) * 100 / dur), true
+}
+
 // Stats holds usage and rate-limit data captured from the most recent turn.
 type Stats struct {
 	// Token counts (from the result event).
@@ -32,11 +63,10 @@ type Stats struct {
 	TotalCostUSD float64
 	DurationMS   int64
 
-	// Rate limit info (from rate_limit_event; zero values = no event seen yet).
-	RateLimitStatus   string    // e.g. "ok", "rejected"
-	RateLimitType     string    // e.g. "five_hour", "seven_day"
-	RateLimitResetsAt time.Time // zero if not set
-	IsUsingOverage    bool
+	// Per-window rate limit data, keyed by rate limit type (e.g. "five_hour",
+	// "seven_day"). Updated whenever a rate_limit_event arrives; each window
+	// accumulates independently so both can be shown at once.
+	RateLimitWindows map[string]RateLimitWindow
 
 	UpdatedAt time.Time
 }
@@ -52,15 +82,6 @@ func (s Stats) ContextUsedPct() int {
 		return 0
 	}
 	return s.ContextTotalTokens() * 100 / s.ContextWindow
-}
-
-// FormatBar returns a text progress bar of the given width for the given percentage.
-func FormatBar(pct, width int) string {
-	if pct > 100 {
-		pct = 100
-	}
-	filled := pct * width / 100
-	return strings.Repeat("█", filled) + strings.Repeat("░", width-filled)
 }
 
 // FormatTokens formats a token count with thousands separators (e.g. 18,801).
@@ -443,15 +464,20 @@ func (s *Session) applyResultStats(e streamEvent) {
 	s.mu.Unlock()
 }
 
-// applyRateLimitStats updates rate-limit fields from a rate_limit_event.
+// applyRateLimitStats updates the per-window rate limit data from a rate_limit_event.
 func (s *Session) applyRateLimitStats(rl *rateLimitInfo) {
 	s.mu.Lock()
-	s.stats.RateLimitStatus = rl.Status
-	s.stats.RateLimitType = rl.RateLimitType
-	s.stats.IsUsingOverage = rl.IsUsingOverage
-	if rl.ResetsAt > 0 {
-		s.stats.RateLimitResetsAt = time.Unix(rl.ResetsAt, 0)
+	if s.stats.RateLimitWindows == nil {
+		s.stats.RateLimitWindows = make(map[string]RateLimitWindow)
 	}
+	w := RateLimitWindow{
+		Status:    rl.Status,
+		IsOverage: rl.IsUsingOverage,
+	}
+	if rl.ResetsAt > 0 {
+		w.ResetsAt = time.Unix(rl.ResetsAt, 0)
+	}
+	s.stats.RateLimitWindows[rl.RateLimitType] = w
 	s.stats.UpdatedAt = time.Now()
 	s.mu.Unlock()
 }

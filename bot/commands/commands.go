@@ -15,8 +15,6 @@ import (
 	"github.com/bwmarrin/discordgo"
 )
 
-const statsBarWidth = 12
-
 type handler struct {
 	sessions *session.Manager
 	store    *db.Store
@@ -245,31 +243,35 @@ func (h *handler) handleStats(s *discordgo.Session, i *discordgo.InteractionCrea
 	var sb strings.Builder
 
 	// Context window.
-	ctxPct := st.ContextUsedPct()
-	ctxBar := session.FormatBar(ctxPct, statsBarWidth)
-	fmt.Fprintf(&sb, "**Context** `%s` %d%% (%s / %s tokens)\n",
-		ctxBar, ctxPct,
+	fmt.Fprintf(&sb, "**Context** %d%% (%s / %s tokens)\n",
+		st.ContextUsedPct(),
 		session.FormatTokens(st.ContextTotalTokens()),
 		session.FormatTokens(st.ContextWindow))
 
-	// Rate limits.
-	if st.RateLimitType != "" {
-		label := st.RateLimitType
-		switch st.RateLimitStatus {
-		case "ok", "":
-			fmt.Fprintf(&sb, "**Rate limit** `%s` — OK\n", label)
-		default:
-			if !st.RateLimitResetsAt.IsZero() {
-				fmt.Fprintf(&sb, "**Rate limit** `%s` — %s (resets %s)\n",
-					label, st.RateLimitStatus,
-					st.RateLimitResetsAt.UTC().Format("Jan 2 15:04 UTC"))
+	// Rate limits — one line per known window type.
+	for _, windowType := range []string{"five_hour", "seven_day"} {
+		w, ok := st.RateLimitWindows[windowType]
+		if !ok {
+			continue
+		}
+		label := map[string]string{"five_hour": "5-hour", "seven_day": "7-day"}[windowType]
+		pct, hasPct := w.UsedPct(windowType)
+		if hasPct {
+			fmt.Fprintf(&sb, "**%s rate** %d%%", label, pct)
+		} else {
+			fmt.Fprintf(&sb, "**%s rate** —", label)
+		}
+		if w.Status != "" && w.Status != "ok" {
+			if !w.ResetsAt.IsZero() {
+				fmt.Fprintf(&sb, " (%s, resets %s)", w.Status, w.ResetsAt.UTC().Format("Jan 2 15:04 UTC"))
 			} else {
-				fmt.Fprintf(&sb, "**Rate limit** `%s` — %s\n", label, st.RateLimitStatus)
+				fmt.Fprintf(&sb, " (%s)", w.Status)
 			}
 		}
-		if st.IsUsingOverage {
-			sb.WriteString("  _(overage allowed)_\n")
+		if w.IsOverage {
+			sb.WriteString(" _(overage)_")
 		}
+		sb.WriteByte('\n')
 	}
 
 	// Cost and duration of last turn.

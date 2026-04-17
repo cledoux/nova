@@ -232,6 +232,37 @@ func (m *Manager) postThinkingThread(channelID, messageID string, thinking []str
 	}
 }
 
+// updateChannelTopic sets the channel topic to a compact stats summary after each turn.
+// Runs in the background; logs but does not surface errors.
+func (m *Manager) updateChannelTopic(channelID string) {
+	m.mu.RLock()
+	sess := m.byChan[channelID]
+	m.mu.RUnlock()
+	if sess == nil {
+		return
+	}
+	st := sess.GetStats()
+	if st.UpdatedAt.IsZero() {
+		return
+	}
+
+	topic := fmt.Sprintf("ctx %d%%", st.ContextUsedPct())
+	for _, windowType := range []string{"five_hour", "seven_day"} {
+		w, ok := st.RateLimitWindows[windowType]
+		if !ok {
+			continue
+		}
+		label := map[string]string{"five_hour": "5hr", "seven_day": "7d"}[windowType]
+		if pct, ok := w.UsedPct(windowType); ok {
+			topic += fmt.Sprintf(" | %s %d%%", label, pct)
+		}
+	}
+
+	if err := discordhelper.SetChannelTopic(m.discord, channelID, topic); err != nil {
+		slog.Warn("failed to update channel topic", "channel_id", channelID, "err", err)
+	}
+}
+
 // Restart posts a notice to channelID and then calls RestartFn (default: os.Exit(0)).
 // Docker's restart: unless-stopped policy brings the process back up.
 func (m *Manager) Restart(channelID string) {
@@ -331,6 +362,7 @@ func (m *Manager) makeCallbacks(ctx context.Context) Callbacks {
 			if len(thinking) > 0 && msgID != "" {
 				go m.postThinkingThread(channelID, msgID, thinking)
 			}
+			go m.updateChannelTopic(channelID)
 		},
 		OnDirective: func(sess *Session, d directive.Directive) {
 			slog.Info("handling directive", "session", sess.Name, "type", d.Type)
