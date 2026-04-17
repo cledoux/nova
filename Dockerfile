@@ -54,6 +54,13 @@ RUN curl -fsSL https://claude.ai/install.sh | bash
 RUN echo '{"numStartups":1,"installMethod":"native","autoUpdates":false,"hasCompletedOnboarding":true,"lastOnboardingVersion":"2.1.110","migrationVersion":11,"opusProMigrationComplete":true,"sonnet1m45MigrationComplete":true,"projects":{"/home/agent":{"hasTrustDialogAccepted":true}}}' \
     > /home/agent/.claude.json
 
+# Beans — flat-file issue tracker for agent+human collaboration
+# https://github.com/hmans/beans
+RUN curl -fsSL $(curl -fsSL https://api.github.com/repos/hmans/beans/releases/latest \
+        | python3 -c "import sys,json; print(next(a['browser_download_url'] for a in json.load(sys.stdin)['assets'] if 'Linux_x86_64' in a['name']))") \
+    | tar -xz -C /home/agent/.local/bin beans \
+    && chmod +x /home/agent/.local/bin/beans
+
 # Vim config and plugins — run prepare-build-image first to stage these files
 COPY --chown=agent:agent build/.vimrc /home/agent/.vimrc
 COPY --chown=agent:agent build/.vim-autoload /home/agent/.vim/autoload
