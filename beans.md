@@ -19,7 +19,7 @@ RUN curl -fsSL $(curl -fsSL https://api.github.com/repos/hmans/beans/releases/la
 
 Already done — `.beans/` and `.beans.yml` exist in the repo root. Both should be committed to git.
 
-Pending: rename `prefix: workspace-` → `prefix: nova-` in `.beans.yml`.
+Config is committed to the repo. Prefix is `nova-`.
 
 ## Workflow
 
@@ -87,9 +87,18 @@ beans query --json '{ beans(filter: { excludeStatus: ["completed","scrapped"], i
 beans query --json '{ bean(id: "<id>") { title body parent { title } children { id title status } } }'
 ```
 
+## Agent Access Pattern
+
+**Decision: GraphQL exclusively** (`beans graphql '<query>'`).
+
+Rationale: single call can traverse relationships (parent, children, blockedBy, blocking);
+precise field selection keeps token overhead low; full-text search built in; mutations
+available through the same interface. Crucially, `beans graphql` is not a separate server —
+it's the same CLI subprocess with a richer query language. No port, no lifecycle to manage.
+
+Use the CLI (`beans create`, `beans update`) only for writes where the GraphQL mutation
+syntax would be more cumbersome than the flag-based equivalent.
+
 ## What's Next
 
-- [ ] Rename prefix in `.beans.yml` from `workspace-` to `nova-`
-- [ ] Commit `.beans/` and `.beans.yml` to the repo
-- [ ] Decide on agent access pattern: CLI (`--json`) vs. GraphQL server
 - [ ] Create initial beans for backlog items in `BACKLOG.md`
