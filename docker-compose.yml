@@ -11,6 +11,7 @@ services:
       - ./mounts/claude/settings.json:/home/agent/.claude/settings.json
       - ./mounts/claude/statusline-command.sh:/home/agent/.claude/statusline-command.sh
       - ./mounts/claude/test_statusline.sh:/home/agent/.claude/test_statusline.sh
+      - ./mounts/claude/skills:/home/agent/.claude/skills
       - ./mounts/nova:/home/agent/.nova
       - .:/home/agent/workspace
     command: /home/agent/workspace/bin/nova --config /home/agent/.nova/config.toml

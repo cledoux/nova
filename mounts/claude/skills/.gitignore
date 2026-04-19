@@ -1,0 +1,3 @@
+# Ignore all generated state — only versioned skill files are tracked.
+*
+!.gitignore
