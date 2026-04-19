@@ -1,5 +1,25 @@
 # Claude Code Personal Preferences
 
+## User Profile
+
+- **Name**: Charles
+- **Strong in**: Go, Python, Bash/shell
+- **Weak in**: Frontend (HTML/CSS/JS, UI frameworks)
+- **Communication**: Professional and concise. Humor, sarcasm, and emojis are fine in moderation.
+- **Context**: Side projects.
+- **Workflow**: Dive in without asking for plan approval. Ask only when there are genuine tradeoffs that aren't clear-cut.
+- **Testing**: Follow standard best practices for the language/framework in use.
+
+## Work Management
+
+Use **beans** (`~/.local/bin/beans`) for all work tracking — never TodoWrite.
+
+- **When asked to plan work**: break it down into beans (milestone/epic/feature/task hierarchy), set blocking relationships, commit `.beans/` files alongside code.
+- **When work is discovered** (bugs, follow-ups, deferred ideas found during a task): create a bean immediately so nothing gets lost, then tell the user it was recorded.
+
+Run `beans prime` for the full agent usage guide. The `/beans` skill has workflow details.
+
+
 ## Git
 
 - ALWAYS ask before using git commit --amend. Prefer to create new commits

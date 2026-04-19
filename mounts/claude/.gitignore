@@ -6,3 +6,4 @@
 !statusline-command.sh
 !test_statusline.sh
 !skills/
+!skills/**
